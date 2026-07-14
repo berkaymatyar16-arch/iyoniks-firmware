@@ -11,54 +11,6 @@ from adafruit_ili9341 import ILI9341
 from adafruit_display_text import label
 from adafruit_bus_device import i2c_device
 
-# ---- OTA / MQTT icin ek kutuphaneler ----
-import wifi
-import socketpool
-import ssl
-import os
-import microcontroller
-import adafruit_minimqtt.adafruit_minimqtt as MQTT
-import adafruit_requests
-
-# ============================================================
-#  0. OTA / MQTT AYARLARI
-#  NOT: Bu blok sadece uzaktan guncelleme icin. Kombi kontrol
-#  mantigi (ekran, elektrot, PZEM) bu ayarlardan etkilenmez.
-# ============================================================
-
-WIFI_SSID = "VODAFONE_5775"
-WIFI_PASS = "r7iupxpvxn4"
-
-MQTT_BROKER = "429cfdf2bbc44476b16e3466dfaea8e1.s1.eu.hivemq.cloud"
-MQTT_USER   = "iyoniks"
-MQTT_PASS   = "Iyoniks123"
-MQTT_PORT   = 8883
-CLIENT_ID   = "anka_kombi_1"
-
-OTA_URL = "https://raw.githubusercontent.com/berkaymatyar16-arch/iyoniks-firmware/main/code.py"
-
-DEVICE_ID = "1"
-
-TOPIC_OTA_COMMAND   = f"otacommand{DEVICE_ID}"
-TOPIC_OTA_STATUS    = f"otastatus{DEVICE_ID}"
-TOPIC_NTC           = f"ntc{DEVICE_ID}"
-TOPIC_RELAY_STATUS  = f"relaystatus{DEVICE_ID}"
-TOPIC_AKIM          = f"akim{DEVICE_ID}"
-
-WIFI_RETRY_INTERVAL  = 30   # wifi kopuksa kac saniyede bir tekrar denesin
-MQTT_RETRY_INTERVAL  = 15   # mqtt kopuksa kac saniyede bir tekrar denesin
-TELEMETRI_INTERVAL   = 5    # durum verisi kac saniyede bir yayinlansin
-MQTT_LOOP_INTERVAL   = 1.0  # mqtt_client.loop() en fazla bu sikilikta cagrilsin (kutuphane min. 1sn bekliyor)
-
-_pool         = None
-_mqtt_client  = None
-_wifi_baglandi_mi = False
-_mqtt_baglandi_mi = False
-_son_wifi_deneme  = -9999.0
-_son_mqtt_deneme  = -9999.0
-_son_telemetri    = 0.0
-_son_mqtt_loop    = -9999.0
-
 # ============================================================
 #  1. DONANIM
 # ============================================================
@@ -438,6 +390,8 @@ hdr_pal = displayio.Palette(1)
 hdr_pal[0] = 0x003366
 splash.append(displayio.TileGrid(hdr_bmp, pixel_shader=hdr_pal, x=0, y=0))
 
+# Sicaklik paneli - buyutuldu (tam genislik, eskiden sag panelin
+# kapladigi alan da dahil edildi: Amper/Voltaj/Aylik kWh kaldirildi)
 sic_cerceve_bmp = displayio.Bitmap(316, 86, 1)
 sic_cerceve_pal = displayio.Palette(1)
 sic_cerceve_pal[0] = 0x0055AA
@@ -485,7 +439,7 @@ splash.append(displayio.TileGrid(alt_bmp, pixel_shader=alt_pal, x=0, y=211))
 
 gc.collect()
 
-sbar_bg_bmp = displayio.Bitmap(150, 5, 1)
+sbar_bg_bmp = displayio.Bitmap(300, 5, 1)
 sbar_bg_pal = displayio.Palette(1)
 sbar_bg_pal[0] = 0xCCDDEE
 splash.append(displayio.TileGrid(sbar_bg_bmp, pixel_shader=sbar_bg_pal, x=4, y=97))
@@ -513,13 +467,12 @@ lbl_mod    = _lbl("* KIS *",       0x88CCFF, 1, 230,  4)
 
 gc.collect()
 
-_lbl("KAZAN", 0x000000, 1, 160, 18, (0.5, 0.0))
-lbl_sicaklik = _lbl("--.-", 0x000000, 5, 160, 28, (0.5, 0.0))
-_lbl("C", 0x000000, 2, 242, 55, (0.0, 0.0))
+# Sicaklik gostergesi - buyutuldu ve panel genisligine gore ortalandi
+_lbl("KAZAN", 0x000000, 1, 158, 23, (0.5, 0.0))
+lbl_sicaklik = _lbl("--.-", 0x000000, 5, 148, 33, (0.5, 0.0))
+_lbl("C", 0x000000, 2, 290, 44, (0.0, 0.0))
 _lbl("HEDEF", 0x000000, 1, 6, 88, (0.0, 0.0))
 lbl_hd = _lbl("70C", 0x000000, 1, 42, 88, (0.0, 0.0))
-
-gc.collect()
 
 gc.collect()
 
@@ -832,8 +785,7 @@ def kontrol(sicaklik, now):
         return
 
     if anot_dusus:
-        if sicaklik > 67.0:
-            # 70 -> 67C: hicbir elektrot calismaz
+        if sicaklik > 67.5:
             _q0_etkin = False
             _q1_etkin = False
             _q0_duty  = 0.0
@@ -846,27 +798,18 @@ def kontrol(sicaklik, now):
                 pca.port1_yaz_eger_degistiyse(deger)
             elektrot_sure_guncelle(False, False, False, now)
             return
-        elif sicaklik > 65.0:
-            # 67 -> 65C: sadece Q2 calisir
-            _q0_etkin = False
-            _q1_etkin = False
-            _q0_duty  = 0.0
-            _q1_duty  = 0.0
-            port1_uygula(False, False, True, p2_aktif, p1_aktif)
-            elektrot_sure_guncelle(False, False, True, now)
-            return
         else:
             anot_dusus = False
 
     q2_ac = False
     if sicaklik >= 65.0:
-        # 65-70C bandi: Q1 ve Q2 calisir (Q0 kapali)
+        # 65-70C arasi: sadece Q2 (3. elektrot) calisir
         _q0_etkin = False
-        _q1_etkin = True
+        _q1_etkin = False
         _q0_duty  = 0.0
-        _q1_duty  = 1.0
+        _q1_duty  = 0.0
         q2_ac     = True
-        port1_uygula(False, True, True, p2_aktif, p1_aktif)
+        port1_uygula(False, False, True, p2_aktif, p1_aktif)
     elif sicaklik >= 60.0:
         _q0_etkin = True
         _q1_etkin = True
@@ -1001,203 +944,6 @@ for _yol in ["/sd/logo.bmp", "/logo.bmp"]:
 gc.collect()
 
 # ============================================================
-#  14b. OTA / MQTT / WIFI (kombi kontrolunu ASLA bloklamaz)
-# ============================================================
-
-def _wifi_dene():
-    """Tek seferlik, sinirli sureli wifi baglanti denemesi. Bloklamaz/patlamaz."""
-    global _wifi_baglandi_mi, _pool
-    try:
-        if wifi.radio.ipv4_address:
-            _wifi_baglandi_mi = True
-            return True
-    except Exception:
-        pass
-    if not WIFI_SSID:
-        return False
-    try:
-        wifi.radio.connect(WIFI_SSID, WIFI_PASS, timeout=8)
-        if wifi.radio.ipv4_address:
-            _wifi_baglandi_mi = True
-            _pool = socketpool.SocketPool(wifi.radio)
-            print("Wi-Fi baglandi:", wifi.radio.ipv4_address)
-            return True
-    except Exception as e:
-        print("Wi-Fi baglanti hatasi:", e)
-    _wifi_baglandi_mi = False
-    return False
-
-
-def _mqtt_on_message(client_inner, topic, message):
-    try:
-        if isinstance(message, (bytes, bytearray)):
-            message = message.decode("utf-8")
-        msg = message.strip()
-        print("MQTT mesaj:", topic, "->", msg)
-        if topic == TOPIC_OTA_COMMAND:
-            if msg == "UPDATE":
-                _ota_guncelle(OTA_URL)
-            elif msg.startswith("UPDATE:"):
-                _ota_guncelle(msg[7:].strip())
-    except Exception as e:
-        print("MQTT mesaj isleme hatasi:", e)
-
-
-def _mqtt_dene():
-    """Tek seferlik mqtt baglanti denemesi. Bloklamaz/patlamaz."""
-    global _mqtt_client, _mqtt_baglandi_mi
-    if _pool is None:
-        return False
-    try:
-        if _mqtt_client is None:
-            ssl_ctx = ssl.create_default_context()
-            _mqtt_client = MQTT.MQTT(
-                broker=MQTT_BROKER,
-                port=MQTT_PORT,
-                username=MQTT_USER,
-                password=MQTT_PASS,
-                socket_pool=_pool,
-                client_id=CLIENT_ID,
-                ssl_context=ssl_ctx,
-                is_ssl=True,
-            )
-            _mqtt_client.on_message = _mqtt_on_message
-        _mqtt_client.connect()
-        _mqtt_client.subscribe(TOPIC_OTA_COMMAND)
-        _mqtt_baglandi_mi = True
-        print("MQTT baglandi.")
-        return True
-    except Exception as e:
-        print("MQTT baglanti hatasi:", e)
-        _mqtt_baglandi_mi = False
-        try:
-            _mqtt_client.disconnect()
-        except Exception:
-            pass
-        return False
-
-
-def _telemetri_yayinla():
-    """Kombinin canli durumunu MQTT'ye yayinlar. Hata olursa sessizce gecer."""
-    try:
-        if sicaklik_son[0] is not None:
-            _mqtt_client.publish(TOPIC_NTC, str(sicaklik_son[0]), retain=True)
-        if son_akim is not None:
-            _mqtt_client.publish(TOPIC_AKIM, str(son_akim), retain=True)
-        p1 = pca._p1 if pca else 0
-        durum = f"Q0:{int(bool(p1 & M_Q0))},Q1:{int(bool(p1 & M_Q1))},Q2:{int(bool(p1 & M_Q2))},P1:{int(bool(p1 & M_Q3))},P2:{int(bool(p1 & M_Q4))}"
-        _mqtt_client.publish(TOPIC_RELAY_STATUS, durum, retain=True)
-    except Exception as e:
-        print("Telemetri yayin hatasi:", e)
-
-
-def _ota_guncelle(url):
-    """
-    GitHub'dan yeni code.py indirir ve atomik olarak degistirir.
-    Basarisiz olursa yedegi geri yukler. Kombi kontrolunu etkilemez
-    cunku sadece MQTT komutu geldiginde, bilinçli olarak cagrilir.
-    """
-    print("OTA basliyor:", url)
-    try:
-        try:
-            _mqtt_client.publish(TOPIC_OTA_STATUS, "OTA:BASLIYOR", retain=False)
-        except Exception:
-            pass
-
-        ssl_ctx = ssl.create_default_context()
-        req = adafruit_requests.Session(_pool, ssl_ctx)
-
-        try:
-            _mqtt_client.publish(TOPIC_OTA_STATUS, "OTA:INDIRILIYOR", retain=False)
-        except Exception:
-            pass
-
-        response = req.get(url, timeout=30)
-        if response.status_code != 200:
-            print("OTA HTTP hatasi:", response.status_code)
-            try:
-                _mqtt_client.publish(TOPIC_OTA_STATUS, f"OTA:HATA:HTTP{response.status_code}", retain=False)
-            except Exception:
-                pass
-            return False
-
-        yeni_kod = response.text
-        response.close()
-
-        try:
-            _mqtt_client.publish(TOPIC_OTA_STATUS, f"OTA:YAZILIYOR:{len(yeni_kod)}byte", retain=False)
-        except Exception:
-            pass
-
-        with open("/code_new.py", "w") as f:
-            f.write(yeni_kod)
-
-        try:
-            os.rename("/code.py", "/code_bak.py")
-        except Exception:
-            pass
-
-        os.rename("/code_new.py", "/code.py")
-
-        print("OTA tamam, yeniden baslatiliyor...")
-        try:
-            _mqtt_client.publish(TOPIC_OTA_STATUS, "OTA:TAMAMLANDI:REBOOT", retain=False)
-        except Exception:
-            pass
-        time.sleep(2)
-        microcontroller.reset()
-
-    except Exception as e:
-        print("OTA hatasi:", e)
-        try:
-            os.rename("/code_bak.py", "/code.py")
-            print("Yedek geri yuklendi.")
-        except Exception:
-            pass
-        try:
-            _mqtt_client.publish(TOPIC_OTA_STATUS, f"OTA:HATA:{str(e)[:50]}", retain=False)
-        except Exception:
-            pass
-        return False
-
-
-def ag_servis(now):
-    """
-    Her ana dongu turunde cagrilir. Wi-Fi/MQTT ile ilgili HER SEYI
-    try/except icine alir; burada olusacak hicbir hata kombi kontrol
-    dongusunu asla durduramaz.
-    """
-    global _son_wifi_deneme, _son_mqtt_deneme, _son_telemetri, _mqtt_baglandi_mi, _son_mqtt_loop
-    try:
-        if not _wifi_baglandi_mi:
-            if now - _son_wifi_deneme >= WIFI_RETRY_INTERVAL:
-                _son_wifi_deneme = now
-                _wifi_dene()
-            return
-
-        if not _mqtt_baglandi_mi:
-            if now - _son_mqtt_deneme >= MQTT_RETRY_INTERVAL:
-                _son_mqtt_deneme = now
-                _mqtt_dene()
-            return
-
-        if now - _son_mqtt_loop >= MQTT_LOOP_INTERVAL:
-            _son_mqtt_loop = now
-            _mqtt_client.loop(timeout=1)
-
-        if now - _son_telemetri >= TELEMETRI_INTERVAL:
-            _son_telemetri = now
-            _telemetri_yayinla()
-
-    except Exception as e:
-        print("Ag servis hatasi:", e)
-        _mqtt_baglandi_mi = False
-
-
-# sicaklik_son: ekran/telemetri arasinda son gecerli sicakligi tasimak icin kutu
-sicaklik_son = [None]
-
-# ============================================================
 #  15. ANA DONGU
 # ============================================================
 
@@ -1236,9 +982,6 @@ while True:
         now = time.monotonic()
 
         sicaklik = read_ntc()
-        sicaklik_son[0] = sicaklik
-
-        ag_servis(now)
 
         if now - son_modbus >= 3.0:
             son_akim = read_pzem_current()
