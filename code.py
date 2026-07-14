@@ -48,6 +48,7 @@ TOPIC_AKIM          = f"akim{DEVICE_ID}"
 WIFI_RETRY_INTERVAL  = 30   # wifi kopuksa kac saniyede bir tekrar denesin
 MQTT_RETRY_INTERVAL  = 15   # mqtt kopuksa kac saniyede bir tekrar denesin
 TELEMETRI_INTERVAL   = 5    # durum verisi kac saniyede bir yayinlansin
+MQTT_LOOP_INTERVAL   = 1.0  # mqtt_client.loop() en fazla bu sikilikta cagrilsin (kutuphane min. 1sn bekliyor)
 
 _pool         = None
 _mqtt_client  = None
@@ -56,6 +57,7 @@ _mqtt_baglandi_mi = False
 _son_wifi_deneme  = -9999.0
 _son_mqtt_deneme  = -9999.0
 _son_telemetri    = 0.0
+_son_mqtt_loop    = -9999.0
 
 # ============================================================
 #  1. DONANIM
@@ -1165,7 +1167,7 @@ def ag_servis(now):
     try/except icine alir; burada olusacak hicbir hata kombi kontrol
     dongusunu asla durduramaz.
     """
-    global _son_wifi_deneme, _son_mqtt_deneme, _son_telemetri, _mqtt_baglandi_mi
+    global _son_wifi_deneme, _son_mqtt_deneme, _son_telemetri, _mqtt_baglandi_mi, _son_mqtt_loop
     try:
         if not _wifi_baglandi_mi:
             if now - _son_wifi_deneme >= WIFI_RETRY_INTERVAL:
@@ -1179,7 +1181,9 @@ def ag_servis(now):
                 _mqtt_dene()
             return
 
-        _mqtt_client.loop(timeout=0.05)
+        if now - _son_mqtt_loop >= MQTT_LOOP_INTERVAL:
+            _son_mqtt_loop = now
+            _mqtt_client.loop(timeout=1)
 
         if now - _son_telemetri >= TELEMETRI_INTERVAL:
             _son_telemetri = now
