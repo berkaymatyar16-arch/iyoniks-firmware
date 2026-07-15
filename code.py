@@ -425,12 +425,12 @@ splash.append(displayio.TileGrid(hdr_bmp, pixel_shader=hdr_pal, x=0, y=0))
 sic_cerceve_bmp = displayio.Bitmap(316, 86, 1)
 sic_cerceve_pal = displayio.Palette(1)
 sic_cerceve_pal[0] = 0x0055AA
-splash.append(displayio.TileGrid(sic_cerceve_bmp, pixel_shader=sic_cerceve_pal, x=2, y=19))
+splash.append(displayio.TileGrid(sic_cerceve_bmp, pixel_shader=sic_cerceve_pal, x=2, y=123))
 
 sic_ic_bmp = displayio.Bitmap(312, 82, 1)
 sic_ic_pal = displayio.Palette(1)
 sic_ic_pal[0] = 0xF0F8FF
-splash.append(displayio.TileGrid(sic_ic_bmp, pixel_shader=sic_ic_pal, x=4, y=21))
+splash.append(displayio.TileGrid(sic_ic_bmp, pixel_shader=sic_ic_pal, x=4, y=125))
 
 gc.collect()
 
@@ -439,15 +439,15 @@ eq_h = 50
 eq_bmp0 = displayio.Bitmap(eq_w, eq_h, 1)
 eq_pal0 = displayio.Palette(1)
 eq_pal0[0] = 0x550000
-splash.append(displayio.TileGrid(eq_bmp0, pixel_shader=eq_pal0, x=0,   y=107))
+splash.append(displayio.TileGrid(eq_bmp0, pixel_shader=eq_pal0, x=0,   y=19))
 eq_bmp1 = displayio.Bitmap(eq_w, eq_h, 1)
 eq_pal1 = displayio.Palette(1)
 eq_pal1[0] = 0x550000
-splash.append(displayio.TileGrid(eq_bmp1, pixel_shader=eq_pal1, x=107, y=107))
+splash.append(displayio.TileGrid(eq_bmp1, pixel_shader=eq_pal1, x=107, y=19))
 eq_bmp2 = displayio.Bitmap(eq_w, eq_h, 1)
 eq_pal2 = displayio.Palette(1)
 eq_pal2[0] = 0x550000
-splash.append(displayio.TileGrid(eq_bmp2, pixel_shader=eq_pal2, x=214, y=107))
+splash.append(displayio.TileGrid(eq_bmp2, pixel_shader=eq_pal2, x=214, y=19))
 eq_pal_list = [eq_pal0, eq_pal1, eq_pal2]
 
 gc.collect()
@@ -455,12 +455,12 @@ gc.collect()
 p1_bmp = displayio.Bitmap(156, 50, 1)
 p1_pal = displayio.Palette(1)
 p1_pal[0] = 0x111111
-splash.append(displayio.TileGrid(p1_bmp, pixel_shader=p1_pal, x=2, y=159))
+splash.append(displayio.TileGrid(p1_bmp, pixel_shader=p1_pal, x=2, y=71))
 
 p2_bmp = displayio.Bitmap(156, 50, 1)
 p2_pal = displayio.Palette(1)
 p2_pal[0] = 0x111111
-splash.append(displayio.TileGrid(p2_bmp, pixel_shader=p2_pal, x=161, y=159))
+splash.append(displayio.TileGrid(p2_bmp, pixel_shader=p2_pal, x=161, y=71))
 
 alt_bmp = displayio.Bitmap(320, 29, 1)
 alt_pal = displayio.Palette(1)
@@ -472,11 +472,11 @@ gc.collect()
 sbar_bg_bmp = displayio.Bitmap(150, 5, 1)
 sbar_bg_pal = displayio.Palette(1)
 sbar_bg_pal[0] = 0xCCDDEE
-splash.append(displayio.TileGrid(sbar_bg_bmp, pixel_shader=sbar_bg_pal, x=4, y=97))
+splash.append(displayio.TileGrid(sbar_bg_bmp, pixel_shader=sbar_bg_pal, x=4, y=201))
 sbar_fg_bmp = displayio.Bitmap(1, 5, 1)
 sbar_fg_pal = displayio.Palette(1)
 sbar_fg_pal[0] = 0x0066FF
-sbar_tile = displayio.TileGrid(sbar_fg_bmp, pixel_shader=sbar_fg_pal, x=4, y=97)
+sbar_tile = displayio.TileGrid(sbar_fg_bmp, pixel_shader=sbar_fg_pal, x=4, y=201)
 splash.append(sbar_tile)
 sbar_w = 0
 
@@ -491,17 +491,17 @@ def _lbl(txt, color, scale, x, y, anchor=(0.0, 0.0)):
     return l
 
 lbl_baslik = _lbl("IYONiKS KOMBI", 0xFFFFFF, 1, 4,   4)
-lbl_ver    = _lbl("v2.4",          0xCCEEFF, 1, 278,  4)
+lbl_ver    = _lbl("v2.4-L2",       0xCCEEFF, 1, 262,  4)
 lbl_durum  = _lbl("* AKTiF",       0x00FF88, 1, 155,  4)
 lbl_mod    = _lbl("* KIS *",       0x88CCFF, 1, 230,  4)
 
 gc.collect()
 
-_lbl("KAZAN", 0x000000, 1, 160, 18, (0.5, 0.0))
-lbl_sicaklik = _lbl("--.-", 0x000000, 5, 160, 28, (0.5, 0.0))
-_lbl("C", 0x000000, 2, 242, 55, (0.0, 0.0))
-_lbl("HEDEF", 0x000000, 1, 6, 88, (0.0, 0.0))
-lbl_hd = _lbl("70C", 0x000000, 1, 42, 88, (0.0, 0.0))
+_lbl("KAZAN", 0x000000, 1, 160, 122, (0.5, 0.0))
+lbl_sicaklik = _lbl("--.-", 0x000000, 5, 160, 132, (0.5, 0.0))
+_lbl("C", 0x000000, 2, 242, 159, (0.0, 0.0))
+_lbl("HEDEF", 0x000000, 1, 6, 192, (0.0, 0.0))
+lbl_hd = _lbl("70C", 0x000000, 1, 42, 192, (0.0, 0.0))
 
 gc.collect()
 
@@ -512,8 +512,8 @@ EQ_ISIM = ["Q0", "Q1", "Q2"]
 lbl_eq_isim = []
 lbl_eq_saat = []
 for i in range(3):
-    li = _lbl(EQ_ISIM[i], 0xFF5555, 2, EQ_CX[i], 111, (0.5, 0.0))
-    ls = _lbl("0sn",       0xFF8888, 2, EQ_CX[i], 132, (0.5, 0.0))
+    li = _lbl(EQ_ISIM[i], 0xFF5555, 2, EQ_CX[i], 23, (0.5, 0.0))
+    ls = _lbl("0sn",       0xFF8888, 2, EQ_CX[i], 44, (0.5, 0.0))
     lbl_eq_isim.append(li)
     lbl_eq_saat.append(ls)
 
@@ -524,12 +524,12 @@ FAN_DUR  = " +"
 fan_idx  = 0
 son_fan  = 0.0
 
-lbl_p1_fan = _lbl(FAN_DUR,    0x000000, 2, 8,   178, (0.0, 0.0))
-lbl_p1_ad  = _lbl("P1 KAZAN", 0x000000, 1, 44,  180, (0.0, 0.0))
-lbl_p1_alt = _lbl("",         0x000000, 1, 44,  192, (0.0, 0.0))
-lbl_p2_fan = _lbl(FAN_DUR,    0x000000, 2, 169, 178, (0.0, 0.0))
-lbl_p2_ad  = _lbl("P2 PETEK", 0x000000, 1, 205, 180, (0.0, 0.0))
-lbl_p2_alt = _lbl("",         0x000000, 1, 205, 192, (0.0, 0.0))
+lbl_p1_fan = _lbl(FAN_DUR,    0x000000, 2, 8,   90, (0.0, 0.0))
+lbl_p1_ad  = _lbl("P1 KAZAN", 0x000000, 1, 44,  92, (0.0, 0.0))
+lbl_p1_alt = _lbl("",         0x000000, 1, 44,  104, (0.0, 0.0))
+lbl_p2_fan = _lbl(FAN_DUR,    0x000000, 2, 169, 90, (0.0, 0.0))
+lbl_p2_ad  = _lbl("P2 PETEK", 0x000000, 1, 205, 92, (0.0, 0.0))
+lbl_p2_alt = _lbl("",         0x000000, 1, 205, 104, (0.0, 0.0))
 
 gc.collect()
 
