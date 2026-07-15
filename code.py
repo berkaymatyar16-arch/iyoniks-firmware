@@ -48,7 +48,7 @@ TOPIC_AKIM          = f"akim{DEVICE_ID}"
 WIFI_RETRY_INTERVAL  = 30   # wifi kopuksa kac saniyede bir tekrar denesin
 MQTT_RETRY_INTERVAL  = 15   # mqtt kopuksa kac saniyede bir tekrar denesin
 TELEMETRI_INTERVAL   = 5    # durum verisi kac saniyede bir yayinlansin
-MQTT_LOOP_INTERVAL   = 1.0  # mqtt_client.loop() en fazla bu sikilikta cagrilsin (kutuphane min. 1sn bekliyor)
+MQTT_LOOP_INTERVAL   = 4.0  # mqtt_client.loop() en fazla bu sikilikta cagrilsin (butonlarin kilitlenmemesi icin seyreltildi)
 
 _pool         = None
 _mqtt_client  = None
@@ -314,6 +314,7 @@ def read_pzem():
 
         tampon = bytearray()
         bitis = time.monotonic() + 2.0
+        son_buton_tarama = 0.0
         while time.monotonic() < bitis:
             try:
                 bek = uart.in_waiting
@@ -325,6 +326,10 @@ def read_pzem():
                 pass
             if len(tampon) >= BEKLENEN:
                 break
+            simdi = time.monotonic()
+            if simdi - son_buton_tarama >= 0.02:
+                son_buton_tarama = simdi
+                buton_hizli_tara()
             time.sleep(0.001)
 
         if len(tampon) < BEKLENEN:
@@ -587,6 +592,25 @@ termostat_prev = None
 di_ham_p0      = 0x00
 di_ham_p1      = 0x00
 btn_prev       = [False] * 5
+btn_yakalanan  = [False] * 5  # PZEM/MQTT beklerken kacan basislari yakalar
+
+def buton_hizli_tara():
+    """
+    Tek bir hizli I2C okumasi ile buton durumuna bakar, yeni basis varsa
+    btn_yakalanan icine 'kaydeder'. PZEM/MQTT gibi uzun bekleme
+    donguleri icinde cagirilarak basislarin kaybolmasini engeller.
+    """
+    if pca is None:
+        return
+    try:
+        p0 = pca.port0_oku()
+        for i in range(1, 5):
+            basili = bool((p0 >> i) & 1)
+            if basili and not btn_prev[i]:
+                btn_yakalanan[i] = True
+            btn_prev[i] = basili
+    except Exception:
+        pass
 yaz_modu        = False
 yaz_p1_bas65    = 0.0
 yaz_p1_bas65ust = 0.0
@@ -693,10 +717,10 @@ def sic_bar_guncelle(sic):
 #  11. BUTON
 # ============================================================
 
-def buton_oku(cur):
+def buton_oku(basilanlar):
     global yaz_modu, yaz_p1_bas65, yaz_p1_bas65ust
     global standby_modu, donma_koruma, sistem_ac
-    press = [cur[i] and not btn_prev[i] for i in range(5)]
+    press = basilanlar  # zaten kenar-yakalanmis (latched) basis dizisi
     if press[1]:
         yaz_modu = True
         yaz_p1_bas65 = 0.0
@@ -1278,21 +1302,25 @@ time.sleep(0.1)
 buzzer_bip(0.1)
 
 p0_ham = 0xFF
-cur    = [0] * 5
-
 while True:
     try:
         now = time.monotonic()
+
+        buton_hizli_tara()  # bloklamadan once ilk hizli tarama
 
         sicaklik = read_ntc()
         sicaklik_son[0] = sicaklik
 
         ag_servis(now)
 
+        buton_hizli_tara()  # mqtt kontrolunden hemen sonra bir tarama daha
+
         if now - son_modbus >= 3.0:
-            son_akim = read_pzem_current()
+            son_akim = read_pzem_current()  # kendi icinde de butonlari tarar
             kwh_guncelle(now)
             son_modbus = now
+
+        buton_hizli_tara()
 
         if pca is not None:
             try:
@@ -1303,17 +1331,7 @@ while True:
 
         kontrol(sicaklik, now)
 
-        cur = [0] * 5
-        tus_var = False
-        if pca is not None:
-            try:
-                cur = [0] + [(p0_ham >> i) & 1 for i in range(1, 5)]
-                for i in range(1, 5):
-                    if cur[i] and not btn_prev[i]:
-                        tus_var = True
-                        break
-            except Exception:
-                pass
+        tus_var = any(btn_yakalanan[1:5])
 
         if mod == LOGO_MOD:
             if tus_var:
@@ -1333,7 +1351,9 @@ while True:
         elif mod == DERECE_MOD:
             if tus_var:
                 son_tus = now
-                buton_oku(cur)
+                buton_oku(btn_yakalanan)
+                for i in range(1, 5):
+                    btn_yakalanan[i] = False
             if logo_yuklu and (now - son_tus >= BOSTA_SURE):
                 mod = LOGO_MOD
                 display.root_group = logo_group
@@ -1342,9 +1362,6 @@ while True:
                 if now - son_ekran >= 0.5:
                     ekran_guncelle(sicaklik, son_akim, now)
                     son_ekran = now
-
-        for i in range(1, 5):
-            btn_prev[i] = bool(cur[i])
 
         if now - son_gc >= 15.0:
             gc.collect()
