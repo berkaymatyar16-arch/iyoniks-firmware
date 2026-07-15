@@ -414,68 +414,68 @@ display.root_group = splash
 
 bg_bmp = displayio.Bitmap(320, 240, 1)
 bg_pal = displayio.Palette(1)
-bg_pal[0] = 0xFFFFFF
+bg_pal[0] = 0x0A1420
 splash.append(displayio.TileGrid(bg_bmp, pixel_shader=bg_pal))
 
 hdr_bmp = displayio.Bitmap(320, 18, 1)
 hdr_pal = displayio.Palette(1)
-hdr_pal[0] = 0x003366
+hdr_pal[0] = 0x0F2438
 splash.append(displayio.TileGrid(hdr_bmp, pixel_shader=hdr_pal, x=0, y=0))
 
 sic_cerceve_bmp = displayio.Bitmap(316, 86, 1)
 sic_cerceve_pal = displayio.Palette(1)
-sic_cerceve_pal[0] = 0x0055AA
+sic_cerceve_pal[0] = 0x00C8FF
 splash.append(displayio.TileGrid(sic_cerceve_bmp, pixel_shader=sic_cerceve_pal, x=2, y=19))
 
 sic_ic_bmp = displayio.Bitmap(312, 82, 1)
 sic_ic_pal = displayio.Palette(1)
-sic_ic_pal[0] = 0xFFFFFF
+sic_ic_pal[0] = 0x0A1E2E
 splash.append(displayio.TileGrid(sic_ic_bmp, pixel_shader=sic_ic_pal, x=4, y=21))
 
 gc.collect()
 
-eq_w = 105
+eq_w = 96
 eq_h = 50
 eq_bmp0 = displayio.Bitmap(eq_w, eq_h, 1)
 eq_pal0 = displayio.Palette(1)
-eq_pal0[0] = 0x550000
-splash.append(displayio.TileGrid(eq_bmp0, pixel_shader=eq_pal0, x=0,   y=107))
+eq_pal0[0] = 0x1E2430
+splash.append(displayio.TileGrid(eq_bmp0, pixel_shader=eq_pal0, x=8,   y=107))
 eq_bmp1 = displayio.Bitmap(eq_w, eq_h, 1)
 eq_pal1 = displayio.Palette(1)
-eq_pal1[0] = 0x550000
-splash.append(displayio.TileGrid(eq_bmp1, pixel_shader=eq_pal1, x=107, y=107))
+eq_pal1[0] = 0x1E2430
+splash.append(displayio.TileGrid(eq_bmp1, pixel_shader=eq_pal1, x=112, y=107))
 eq_bmp2 = displayio.Bitmap(eq_w, eq_h, 1)
 eq_pal2 = displayio.Palette(1)
-eq_pal2[0] = 0x550000
-splash.append(displayio.TileGrid(eq_bmp2, pixel_shader=eq_pal2, x=214, y=107))
+eq_pal2[0] = 0x1E2430
+splash.append(displayio.TileGrid(eq_bmp2, pixel_shader=eq_pal2, x=216, y=107))
 eq_pal_list = [eq_pal0, eq_pal1, eq_pal2]
 
 gc.collect()
 
 p1_bmp = displayio.Bitmap(156, 50, 1)
 p1_pal = displayio.Palette(1)
-p1_pal[0] = 0xDDDDDD
+p1_pal[0] = 0x1E2430
 splash.append(displayio.TileGrid(p1_bmp, pixel_shader=p1_pal, x=2, y=159))
 
 p2_bmp = displayio.Bitmap(156, 50, 1)
 p2_pal = displayio.Palette(1)
-p2_pal[0] = 0xDDDDDD
+p2_pal[0] = 0x1E2430
 splash.append(displayio.TileGrid(p2_bmp, pixel_shader=p2_pal, x=161, y=159))
 
 alt_bmp = displayio.Bitmap(320, 29, 1)
 alt_pal = displayio.Palette(1)
-alt_pal[0] = 0x003366
+alt_pal[0] = 0x0F2438
 splash.append(displayio.TileGrid(alt_bmp, pixel_shader=alt_pal, x=0, y=211))
 
 gc.collect()
 
 sbar_bg_bmp = displayio.Bitmap(150, 5, 1)
 sbar_bg_pal = displayio.Palette(1)
-sbar_bg_pal[0] = 0xCCDDEE
+sbar_bg_pal[0] = 0x1E2430
 splash.append(displayio.TileGrid(sbar_bg_bmp, pixel_shader=sbar_bg_pal, x=4, y=97))
 sbar_fg_bmp = displayio.Bitmap(1, 5, 1)
 sbar_fg_pal = displayio.Palette(1)
-sbar_fg_pal[0] = 0x0044CC
+sbar_fg_pal[0] = 0x0066FF
 sbar_tile = displayio.TileGrid(sbar_fg_bmp, pixel_shader=sbar_fg_pal, x=4, y=97)
 splash.append(sbar_tile)
 sbar_w = 0
@@ -491,23 +491,22 @@ def _lbl(txt, color, scale, x, y, anchor=(0.0, 0.0)):
     return l
 
 lbl_baslik = _lbl("IYONiKS KOMBI", 0xFFFFFF, 1, 4,   4)
-lbl_ver    = _lbl("v2.4-D1", 0xCCEEFF, 1, 250,  4)
+lbl_ver    = _lbl("v2.4-CYAN",   0x5CC8E8, 1, 250,  4)
 lbl_durum  = _lbl("* AKTiF",       0x00FF88, 1, 155,  4)
 lbl_mod    = _lbl("* KIS *",       0x88CCFF, 1, 230,  4)
 
 gc.collect()
 
-_lbl("KAZAN", 0x003366, 1, 160, 18, (0.5, 0.0))
-lbl_sicaklik = _lbl("--.-", 0x2299EE, 5, 160, 28, (0.5, 0.0))
-_lbl("C", 0x003366, 2, 242, 55, (0.0, 0.0))
-_lbl("HEDEF", 0x003366, 1, 6, 88, (0.0, 0.0))
-lbl_hd = _lbl("70C", 0x003366, 1, 42, 88, (0.0, 0.0))
+_lbl("KAZAN", 0x5CC8E8, 1, 160, 18, (0.5, 0.0))
+lbl_sicaklik = _lbl("--.-", 0x00C8FF, 5, 160, 28, (0.5, 0.0))
+_lbl("C", 0x5CC8E8, 2, 242, 55, (0.0, 0.0))
+lbl_hd = _lbl("HEDEF 70C", 0x5CC8E8, 1, 160, 88, (0.5, 0.0))
 
 gc.collect()
 
 gc.collect()
 
-EQ_CX   = [52, 159, 266]
+EQ_CX   = [56, 160, 264]
 EQ_ISIM = ["Q0", "Q1", "Q2"]
 lbl_eq_isim = []
 lbl_eq_saat = []
@@ -524,12 +523,12 @@ FAN_DUR  = " +"
 fan_idx  = 0
 son_fan  = 0.0
 
-lbl_p1_fan = _lbl(FAN_DUR,    0x999999, 2, 8,   178, (0.0, 0.0))
-lbl_p1_ad  = _lbl("P1 KAZAN", 0x999999, 1, 44,  180, (0.0, 0.0))
-lbl_p1_alt = _lbl("",         0x999999, 1, 44,  192, (0.0, 0.0))
-lbl_p2_fan = _lbl(FAN_DUR,    0x999999, 2, 169, 178, (0.0, 0.0))
-lbl_p2_ad  = _lbl("P2 PETEK", 0x999999, 1, 205, 180, (0.0, 0.0))
-lbl_p2_alt = _lbl("",         0x999999, 1, 205, 192, (0.0, 0.0))
+lbl_p1_fan = _lbl(FAN_DUR,    0x5A6474, 2, 8,   178, (0.0, 0.0))
+lbl_p1_ad  = _lbl("P1 KAZAN", 0x5A6474, 1, 44,  180, (0.0, 0.0))
+lbl_p1_alt = _lbl("",         0x5A6474, 1, 44,  192, (0.0, 0.0))
+lbl_p2_fan = _lbl(FAN_DUR,    0x5A6474, 2, 169, 178, (0.0, 0.0))
+lbl_p2_ad  = _lbl("P2 PETEK", 0x5A6474, 1, 205, 180, (0.0, 0.0))
+lbl_p2_alt = _lbl("",         0x5A6474, 1, 205, 192, (0.0, 0.0))
 
 gc.collect()
 
@@ -907,9 +906,9 @@ def ekran_guncelle(sicaklik, akim, now):
     global fan_idx, son_fan, sbar_w
 
     if alarm_aktif:
-        bg_pal[0] = 0xFF2222 if int(now * 2) % 2 == 0 else 0xFFFFFF
+        bg_pal[0] = 0xFF2244 if int(now * 2) % 2 == 0 else 0x0A1420
     else:
-        bg_pal[0] = 0xFFFFFF
+        bg_pal[0] = 0x0A1420
 
     if alarm_aktif:
         lbl_durum.text  = "! ALARM !"
@@ -919,7 +918,7 @@ def ekran_guncelle(sicaklik, akim, now):
         lbl_durum.color = 0xFF4400
     elif standby_modu:
         lbl_durum.text  = "STANDBY"
-        lbl_durum.color = 0xAAAAAA
+        lbl_durum.color = 0x5A6474
     elif not sistem_ac:
         lbl_durum.text  = "KAPALI"
         lbl_durum.color = 0xFFAA00
@@ -937,18 +936,18 @@ def ekran_guncelle(sicaklik, akim, now):
     if sicaklik is not None:
         lbl_sicaklik.text = fmt1(sicaklik)
         if alarm_aktif:
-            lbl_sicaklik.color = 0xFF0000
+            lbl_sicaklik.color = 0xFF3333
         elif sicaklik >= 68.0:
-            lbl_sicaklik.color = 0xFF6600
+            lbl_sicaklik.color = 0xFF9900
         else:
-            lbl_sicaklik.color = 0x2299EE
-        sic_cerceve_pal[0] = 0xFF2222 if alarm_aktif else 0x0055AA
+            lbl_sicaklik.color = 0x00C8FF
+        sic_cerceve_pal[0] = 0xFF2255 if alarm_aktif else 0x00C8FF
     else:
         lbl_sicaklik.text  = "--.-"
-        lbl_sicaklik.color = 0x999999
+        lbl_sicaklik.color = 0x5A6474
 
     sic_bar_guncelle(sicaklik)
-    lbl_hd.text = fmti(hedef_sicaklik) + "C"
+    lbl_hd.text = "HEDEF " + fmti(hedef_sicaklik) + "C"
 
     p1_reg = pca._p1 if pca else 0x00
 
@@ -957,13 +956,13 @@ def ekran_guncelle(sicaklik, akim, now):
     for i in range(3):
         aktif = sq_durumlar[i]
         if aktif:
-            eq_pal_list[i][0]    = 0x005500
-            lbl_eq_isim[i].color = 0x00FF66
-            lbl_eq_saat[i].color = 0x88FFAA
+            eq_pal_list[i][0]    = 0x0A4A66
+            lbl_eq_isim[i].color = 0x66E0FF
+            lbl_eq_saat[i].color = 0x66E0FF
         else:
-            eq_pal_list[i][0]    = 0x550000
-            lbl_eq_isim[i].color = 0xFF4444
-            lbl_eq_saat[i].color = 0xFF9999
+            eq_pal_list[i][0]    = 0x1E2430
+            lbl_eq_isim[i].color = 0x5A6474
+            lbl_eq_saat[i].color = 0x5A6474
         lbl_eq_saat[i].text = sure_format(elec_saniye(i))
 
     if now - son_fan >= 0.20:
@@ -971,26 +970,26 @@ def ekran_guncelle(sicaklik, akim, now):
         son_fan = now
 
     if sistem_ac and not alarm_aktif and p1_aktif:
-        p1_pal[0]       = 0x004400
+        p1_pal[0]       = 0x0A4A66
         lbl_p1_fan.text  = FAN_KARE[fan_idx]
-        lbl_p1_fan.color = 0x00CC33
-        lbl_p1_ad.color  = 0x00CC33
+        lbl_p1_fan.color = 0x66E0FF
+        lbl_p1_ad.color  = 0x66E0FF
     else:
-        p1_pal[0]       = 0xDDDDDD
+        p1_pal[0]       = 0x1E2430
         lbl_p1_fan.text  = FAN_DUR
-        lbl_p1_fan.color = 0x999999
-        lbl_p1_ad.color  = 0x999999
+        lbl_p1_fan.color = 0x5A6474
+        lbl_p1_ad.color  = 0x5A6474
 
     if p1_reg & M_Q4:
-        p2_pal[0]       = 0x004400
+        p2_pal[0]       = 0x0A4A66
         lbl_p2_fan.text  = FAN_KARE[(fan_idx + 2) % 4]
-        lbl_p2_fan.color = 0x00CC33
-        lbl_p2_ad.color  = 0x00CC33
+        lbl_p2_fan.color = 0x66E0FF
+        lbl_p2_ad.color  = 0x66E0FF
     else:
-        p2_pal[0]       = 0xDDDDDD
+        p2_pal[0]       = 0x1E2430
         lbl_p2_fan.text  = FAN_DUR
-        lbl_p2_fan.color = 0x999999
-        lbl_p2_ad.color  = 0x999999
+        lbl_p2_fan.color = 0x5A6474
+        lbl_p2_ad.color  = 0x5A6474
 
     lbl_toplam_h.text = sure_format(elec_toplam_saniye())
 
