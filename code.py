@@ -48,7 +48,7 @@ TOPIC_AKIM          = f"akim{DEVICE_ID}"
 WIFI_RETRY_INTERVAL  = 30   # wifi kopuksa kac saniyede bir tekrar denesin
 MQTT_RETRY_INTERVAL  = 15   # mqtt kopuksa kac saniyede bir tekrar denesin
 TELEMETRI_INTERVAL   = 5    # durum verisi kac saniyede bir yayinlansin
-MQTT_LOOP_INTERVAL   = 1.0  # mqtt_client.loop() en fazla bu sikilikta cagrilsin (kutuphane min. 1sn bekliyor)
+MQTT_LOOP_INTERVAL   = 4.0  # mqtt_client.loop() en fazla bu sikilikta cagrilsin (butonlarin kilitlenmemesi icin seyreltildi)
 
 _pool         = None
 _mqtt_client  = None
@@ -94,8 +94,8 @@ while not i2c.try_lock():
 i2c.unlock()
 time.sleep(0.1)
 
-uart = busio.UART(tx=board.GP0, rx=board.GP1,
-                  baudrate=9600, bits=8, parity=None, stop=1, timeout=0.5)
+uart = busio.UART(tx=board.GP4, rx=board.GP5,
+                  baudrate=9600, bits=8, parity=None, stop=1, timeout=2)
 
 # ============================================================
 #  2. PCA9535
@@ -309,12 +309,12 @@ def read_pzem():
         de_re.value = True
         time.sleep(0.02)
         uart.write(bytes(pkt))
-        time.sleep(0.05)
-        de_re.value = False
         time.sleep(0.02)
+        de_re.value = False
 
         tampon = bytearray()
-        bitis = time.monotonic() + 0.5
+        bitis = time.monotonic() + 2.0
+        son_buton_tarama = 0.0
         while time.monotonic() < bitis:
             try:
                 bek = uart.in_waiting
@@ -326,7 +326,11 @@ def read_pzem():
                 pass
             if len(tampon) >= BEKLENEN:
                 break
-            time.sleep(0.005)
+            simdi = time.monotonic()
+            if simdi - son_buton_tarama >= 0.02:
+                son_buton_tarama = simdi
+                buton_hizli_tara()
+            time.sleep(0.001)
 
         if len(tampon) < BEKLENEN:
             return False
@@ -347,23 +351,8 @@ def read_pzem():
 
                 _pzem_voltaj = round(regs[0] / 10.0, 1)
 
-                # Akim - PZEM-016 modeline gore farkli olabilir
-                # Yontem 1: 16-bit tek register x0.01
-                a1 = round(regs[1] / 100.0, 2)
-                # Yontem 2: 32-bit low=regs[1] high=regs[2] x0.001
-                a2 = round(((regs[2] << 16) | regs[1]) / 1000.0, 2)
-                # Yontem 3: 16-bit regs[1] x0.001
-                a3 = round(regs[1] / 1000.0, 3)
-                # Mantikli aralik: 0-32A
-                # Once a2, sonra a1, sonra a3
-                if 0.0 <= a2 <= 32.0 and a2 > 0.0:
-                    _pzem_akim = a2
-                elif 0.0 <= a1 <= 32.0 and a1 > 0.0:
-                    _pzem_akim = a1
-                elif 0.0 <= a3 <= 32.0:
-                    _pzem_akim = a3
-                else:
-                    _pzem_akim = 0.0
+                # Akim - MiRDEV'in dogrulanmis tek formulu
+                _pzem_akim = round(((regs[2] << 16) | regs[1]) / 1000.0, 3)
 
                 _pzem_watt    = round(((regs[4] << 16) | regs[3]) / 10.0, 1)
                 _pzem_enerji  = (regs[6] << 16) | regs[5]
@@ -435,7 +424,7 @@ splash.append(displayio.TileGrid(bg_bmp, pixel_shader=bg_pal))
 
 hdr_bmp = displayio.Bitmap(320, 18, 1)
 hdr_pal = displayio.Palette(1)
-hdr_pal[0] = 0x003366
+hdr_pal[0] = 0x1B4D89
 splash.append(displayio.TileGrid(hdr_bmp, pixel_shader=hdr_pal, x=0, y=0))
 
 sic_cerceve_bmp = displayio.Bitmap(316, 86, 1)
@@ -445,49 +434,49 @@ splash.append(displayio.TileGrid(sic_cerceve_bmp, pixel_shader=sic_cerceve_pal, 
 
 sic_ic_bmp = displayio.Bitmap(312, 82, 1)
 sic_ic_pal = displayio.Palette(1)
-sic_ic_pal[0] = 0xF0F8FF
+sic_ic_pal[0] = 0xF0F4F8
 splash.append(displayio.TileGrid(sic_ic_bmp, pixel_shader=sic_ic_pal, x=4, y=21))
 
 gc.collect()
 
-eq_w = 105
+eq_w = 96
 eq_h = 50
 eq_bmp0 = displayio.Bitmap(eq_w, eq_h, 1)
 eq_pal0 = displayio.Palette(1)
-eq_pal0[0] = 0x550000
-splash.append(displayio.TileGrid(eq_bmp0, pixel_shader=eq_pal0, x=0,   y=107))
+eq_pal0[0] = 0xF0F0F3
+splash.append(displayio.TileGrid(eq_bmp0, pixel_shader=eq_pal0, x=8,   y=107))
 eq_bmp1 = displayio.Bitmap(eq_w, eq_h, 1)
 eq_pal1 = displayio.Palette(1)
-eq_pal1[0] = 0x550000
-splash.append(displayio.TileGrid(eq_bmp1, pixel_shader=eq_pal1, x=107, y=107))
+eq_pal1[0] = 0xF0F0F3
+splash.append(displayio.TileGrid(eq_bmp1, pixel_shader=eq_pal1, x=112, y=107))
 eq_bmp2 = displayio.Bitmap(eq_w, eq_h, 1)
 eq_pal2 = displayio.Palette(1)
-eq_pal2[0] = 0x550000
-splash.append(displayio.TileGrid(eq_bmp2, pixel_shader=eq_pal2, x=214, y=107))
+eq_pal2[0] = 0xF0F0F3
+splash.append(displayio.TileGrid(eq_bmp2, pixel_shader=eq_pal2, x=216, y=107))
 eq_pal_list = [eq_pal0, eq_pal1, eq_pal2]
 
 gc.collect()
 
 p1_bmp = displayio.Bitmap(156, 50, 1)
 p1_pal = displayio.Palette(1)
-p1_pal[0] = 0x111111
+p1_pal[0] = 0xF0F0F3
 splash.append(displayio.TileGrid(p1_bmp, pixel_shader=p1_pal, x=2, y=159))
 
 p2_bmp = displayio.Bitmap(156, 50, 1)
 p2_pal = displayio.Palette(1)
-p2_pal[0] = 0x111111
+p2_pal[0] = 0xF0F0F3
 splash.append(displayio.TileGrid(p2_bmp, pixel_shader=p2_pal, x=161, y=159))
 
 alt_bmp = displayio.Bitmap(320, 29, 1)
 alt_pal = displayio.Palette(1)
-alt_pal[0] = 0x003366
+alt_pal[0] = 0x1B4D89
 splash.append(displayio.TileGrid(alt_bmp, pixel_shader=alt_pal, x=0, y=211))
 
 gc.collect()
 
 sbar_bg_bmp = displayio.Bitmap(150, 5, 1)
 sbar_bg_pal = displayio.Palette(1)
-sbar_bg_pal[0] = 0xCCDDEE
+sbar_bg_pal[0] = 0xF0F0F3
 splash.append(displayio.TileGrid(sbar_bg_bmp, pixel_shader=sbar_bg_pal, x=4, y=97))
 sbar_fg_bmp = displayio.Bitmap(1, 5, 1)
 sbar_fg_pal = displayio.Palette(1)
@@ -507,23 +496,22 @@ def _lbl(txt, color, scale, x, y, anchor=(0.0, 0.0)):
     return l
 
 lbl_baslik = _lbl("IYONiKS KOMBI", 0xFFFFFF, 1, 4,   4)
-lbl_ver    = _lbl("v2.4",          0xCCEEFF, 1, 278,  4)
+lbl_ver    = _lbl("v2.4-BEYAZ",   0x5A7A9A, 1, 250,  4)
 lbl_durum  = _lbl("* AKTiF",       0x00FF88, 1, 155,  4)
 lbl_mod    = _lbl("* KIS *",       0x88CCFF, 1, 230,  4)
 
 gc.collect()
 
-_lbl("KAZAN", 0x000000, 1, 160, 18, (0.5, 0.0))
-lbl_sicaklik = _lbl("--.-", 0x000000, 5, 160, 28, (0.5, 0.0))
-_lbl("C", 0x000000, 2, 242, 55, (0.0, 0.0))
-_lbl("HEDEF", 0x000000, 1, 6, 88, (0.0, 0.0))
-lbl_hd = _lbl("70C", 0x000000, 1, 42, 88, (0.0, 0.0))
+_lbl("KAZAN", 0x5A7A9A, 1, 160, 18, (0.5, 0.0))
+lbl_sicaklik = _lbl("--.-", 0x0A2A4A, 5, 160, 28, (0.5, 0.0))
+_lbl("C", 0x5A7A9A, 2, 242, 55, (0.0, 0.0))
+lbl_hd = _lbl("HEDEF 70C", 0x5A7A9A, 1, 160, 88, (0.5, 0.0))
 
 gc.collect()
 
 gc.collect()
 
-EQ_CX   = [52, 159, 266]
+EQ_CX   = [56, 160, 264]
 EQ_ISIM = ["Q0", "Q1", "Q2"]
 lbl_eq_isim = []
 lbl_eq_saat = []
@@ -540,18 +528,75 @@ FAN_DUR  = " +"
 fan_idx  = 0
 son_fan  = 0.0
 
-lbl_p1_fan = _lbl(FAN_DUR,    0x000000, 2, 8,   178, (0.0, 0.0))
-lbl_p1_ad  = _lbl("P1 KAZAN", 0x000000, 1, 44,  180, (0.0, 0.0))
-lbl_p1_alt = _lbl("",         0x000000, 1, 44,  192, (0.0, 0.0))
-lbl_p2_fan = _lbl(FAN_DUR,    0x000000, 2, 169, 178, (0.0, 0.0))
-lbl_p2_ad  = _lbl("P2 PETEK", 0x000000, 1, 205, 180, (0.0, 0.0))
-lbl_p2_alt = _lbl("",         0x000000, 1, 205, 192, (0.0, 0.0))
+lbl_p1_fan = _lbl(FAN_DUR,    0x9AA3B0, 2, 8,   178, (0.0, 0.0))
+lbl_p1_ad  = _lbl("P1 KAZAN", 0x9AA3B0, 1, 44,  180, (0.0, 0.0))
+lbl_p1_alt = _lbl("",         0x9AA3B0, 1, 44,  192, (0.0, 0.0))
+lbl_p2_fan = _lbl(FAN_DUR,    0x9AA3B0, 2, 169, 178, (0.0, 0.0))
+lbl_p2_ad  = _lbl("P2 PETEK", 0x9AA3B0, 1, 205, 180, (0.0, 0.0))
+lbl_p2_alt = _lbl("",         0x9AA3B0, 1, 205, 192, (0.0, 0.0))
 
 gc.collect()
 
 _lbl("TOPLAM", 0xFFFFFF, 1, 4, 216, (0.0, 0.0))
 lbl_toplam_h = _lbl("0sn", 0x00FF88, 2, 58, 213, (0.0, 0.0))
 lbl_mesaj = _lbl("", 0xFFFFFF, 1, 316, 228, (1.0, 0.0))
+
+gc.collect()
+
+# ---- OTA / uzaktan guncelleme banner (buyuk, renkli, dikkat cekici) ----
+ota_banner_grp = displayio.Group()
+ota_bg_bmp = displayio.Bitmap(320, 58, 1)
+ota_bg_pal = displayio.Palette(1)
+ota_bg_pal[0] = 0x00CFFF
+ota_banner_grp.append(displayio.TileGrid(ota_bg_bmp, pixel_shader=ota_bg_pal, x=0, y=91))
+
+lbl_ota_baslik = label.Label(terminalio.FONT, text="", color=0x000000, scale=2)
+lbl_ota_baslik.anchor_point = (0.5, 0.0)
+lbl_ota_baslik.anchored_position = (160, 97)
+ota_banner_grp.append(lbl_ota_baslik)
+
+lbl_ota_alt = label.Label(terminalio.FONT, text="", color=0x000000, scale=1)
+lbl_ota_alt.anchor_point = (0.5, 0.0)
+lbl_ota_alt.anchored_position = (160, 124)
+ota_banner_grp.append(lbl_ota_alt)
+
+ota_banner_grp.hidden = True
+splash.append(ota_banner_grp)  # en sonda eklendi -> en ustte cizilir
+
+def ota_banner_goster(baslik, alt, renk):
+    ota_bg_pal[0] = renk
+    lbl_ota_baslik.text = baslik
+    lbl_ota_alt.text = alt
+    ota_banner_grp.hidden = False
+
+def ota_banner_gizle():
+    ota_banner_grp.hidden = True
+
+gc.collect()
+
+# ---- Termostat durum banner'i (buyuk, ortada, 5sn sonra kendiliginden kapanir) ----
+termo_banner_grp = displayio.Group()
+termo_bg_bmp = displayio.Bitmap(320, 58, 1)
+termo_bg_pal = displayio.Palette(1)
+termo_bg_pal[0] = 0x00CC00
+termo_banner_grp.append(displayio.TileGrid(termo_bg_bmp, pixel_shader=termo_bg_pal, x=0, y=91))
+
+lbl_termo_banner = label.Label(terminalio.FONT, text="", color=0x000000, scale=2)
+lbl_termo_banner.anchor_point = (0.5, 0.5)
+lbl_termo_banner.anchored_position = (160, 120)
+termo_banner_grp.append(lbl_termo_banner)
+
+termo_banner_grp.hidden = True
+splash.append(termo_banner_grp)  # en sonda -> en ustte cizilir
+
+termo_banner_bitis = 0.0
+
+def termo_banner_goster(txt, renk, sure=5.0):
+    global termo_banner_bitis
+    termo_bg_pal[0] = renk
+    lbl_termo_banner.text = txt
+    termo_banner_grp.hidden = False
+    termo_banner_bitis = time.monotonic() + sure
 
 gc.collect()
 
@@ -573,6 +618,25 @@ termostat_prev = None
 di_ham_p0      = 0x00
 di_ham_p1      = 0x00
 btn_prev       = [False] * 5
+btn_yakalanan  = [False] * 5  # PZEM/MQTT beklerken kacan basislari yakalar
+
+def buton_hizli_tara():
+    """
+    Tek bir hizli I2C okumasi ile buton durumuna bakar, yeni basis varsa
+    btn_yakalanan icine 'kaydeder'. PZEM/MQTT gibi uzun bekleme
+    donguleri icinde cagirilarak basislarin kaybolmasini engeller.
+    """
+    if pca is None:
+        return
+    try:
+        p0 = pca.port0_oku()
+        for i in range(1, 5):
+            basili = bool((p0 >> i) & 1)
+            if basili and not btn_prev[i]:
+                btn_yakalanan[i] = True
+            btn_prev[i] = basili
+    except Exception:
+        pass
 yaz_modu        = False
 yaz_p1_bas65    = 0.0
 yaz_p1_bas65ust = 0.0
@@ -613,7 +677,7 @@ def port1_uygula(q0_ac, q1_ac, q2_ac, p2_ac, p1_ac=True):
     pca.port1_yaz_eger_degistiyse(deger)
 
 def termostat_oku(p0=None):
-    global oda_termostat, termostat_prev, di_ham_p0, di_ham_p1
+    global oda_termostat, termostat_prev, di_ham_p0
     if pca is None:
         return oda_termostat
     if p0 is None:
@@ -621,20 +685,13 @@ def termostat_oku(p0=None):
             p0 = pca.port0_oku()
         except Exception:
             p0 = 0x00
-    try:
-        p1_raw = pca._r(1)
-    except Exception:
-        p1_raw = 0x00
     di_ham_p0 = p0
-    di_ham_p1 = p1_raw
-    p0_di = (p0 & 0b11100000) != 0
-    p1_di = (p1_raw & 0b00000111) != 0
-    yeni = p0_di or p1_di
+    yeni = (p0 & 0b11100000) != 0
     if termostat_prev is not None and yeni != termostat_prev:
         if yeni:
-            mesaj_goster("TERMOSTAT ACIK", 2.0, 0x00FF00)
+            termo_banner_goster("TERMOSTAT ACIK", 0x00CC00, 5.0)
         else:
-            mesaj_goster("TERMOSTAT KAPALI", 2.0, 0xFF8800)
+            termo_banner_goster("TERMOSTAT KAPALI", 0xCC3300, 5.0)
     termostat_prev = yeni
     oda_termostat  = yeni
     return oda_termostat
@@ -679,10 +736,10 @@ def sic_bar_guncelle(sic):
 #  11. BUTON
 # ============================================================
 
-def buton_oku(cur):
+def buton_oku(basilanlar):
     global yaz_modu, yaz_p1_bas65, yaz_p1_bas65ust
     global standby_modu, donma_koruma, sistem_ac
-    press = [cur[i] and not btn_prev[i] for i in range(5)]
+    press = basilanlar  # zaten kenar-yakalanmis (latched) basis dizisi
     if press[1]:
         yaz_modu = True
         yaz_p1_bas65 = 0.0
@@ -807,13 +864,14 @@ def kontrol(sicaklik, now):
             p1_aktif     = True
             p1_dongu_bas = 0.0
 
-    # P2 pompa
+    # P2 pompa (petek) - oda termostati YOK, sadece sicakliga gore calisir
     if yaz_modu:
         p2_aktif = False
-    elif oda_termostat and sicaklik >= 70.0:
+    elif sicaklik >= 70.0:
         p2_aktif = True
-    elif sicaklik <= 65.0 or not oda_termostat:
+    elif sicaklik <= 65.0:
         p2_aktif = False
+    # 65-70C arasi: p2_aktif oldugu gibi kalir (histerezis)
 
     # Elektrot kademesi
     if sicaklik >= 70.0:
@@ -892,7 +950,7 @@ def ekran_guncelle(sicaklik, akim, now):
     global fan_idx, son_fan, sbar_w
 
     if alarm_aktif:
-        bg_pal[0] = 0xFFCCCC if int(now * 2) % 2 == 0 else 0xFFFFFF
+        bg_pal[0] = 0xFF2244 if int(now * 2) % 2 == 0 else 0xFFFFFF
     else:
         bg_pal[0] = 0xFFFFFF
 
@@ -904,7 +962,7 @@ def ekran_guncelle(sicaklik, akim, now):
         lbl_durum.color = 0xFF4400
     elif standby_modu:
         lbl_durum.text  = "STANDBY"
-        lbl_durum.color = 0xAAAAAA
+        lbl_durum.color = 0x9AA3B0
     elif not sistem_ac:
         lbl_durum.text  = "KAPALI"
         lbl_durum.color = 0xFFAA00
@@ -922,18 +980,18 @@ def ekran_guncelle(sicaklik, akim, now):
     if sicaklik is not None:
         lbl_sicaklik.text = fmt1(sicaklik)
         if alarm_aktif:
-            lbl_sicaklik.color = 0xFF0000
+            lbl_sicaklik.color = 0xFF3333
         elif sicaklik >= 68.0:
-            lbl_sicaklik.color = 0xFF6600
+            lbl_sicaklik.color = 0xFF9900
         else:
-            lbl_sicaklik.color = 0x000000
-        sic_cerceve_pal[0] = 0xAA0000 if alarm_aktif else 0x0055AA
+            lbl_sicaklik.color = 0x0A2A4A
+        sic_cerceve_pal[0] = 0xFF2255 if alarm_aktif else 0x0055AA
     else:
         lbl_sicaklik.text  = "--.-"
-        lbl_sicaklik.color = 0x000000
+        lbl_sicaklik.color = 0x9AA3B0
 
     sic_bar_guncelle(sicaklik)
-    lbl_hd.text = fmti(hedef_sicaklik) + "C"
+    lbl_hd.text = "HEDEF " + fmti(hedef_sicaklik) + "C"
 
     p1_reg = pca._p1 if pca else 0x00
 
@@ -942,13 +1000,13 @@ def ekran_guncelle(sicaklik, akim, now):
     for i in range(3):
         aktif = sq_durumlar[i]
         if aktif:
-            eq_pal_list[i][0]    = 0x005500
-            lbl_eq_isim[i].color = 0x00FF66
-            lbl_eq_saat[i].color = 0x88FFAA
+            eq_pal_list[i][0]    = 0xD4F5DC
+            lbl_eq_isim[i].color = 0x0F7A34
+            lbl_eq_saat[i].color = 0x0F7A34
         else:
-            eq_pal_list[i][0]    = 0x550000
-            lbl_eq_isim[i].color = 0xFF4444
-            lbl_eq_saat[i].color = 0xFF9999
+            eq_pal_list[i][0]    = 0xF0F0F3
+            lbl_eq_isim[i].color = 0x9AA3B0
+            lbl_eq_saat[i].color = 0x9AA3B0
         lbl_eq_saat[i].text = sure_format(elec_saniye(i))
 
     if now - son_fan >= 0.20:
@@ -956,31 +1014,34 @@ def ekran_guncelle(sicaklik, akim, now):
         son_fan = now
 
     if sistem_ac and not alarm_aktif and p1_aktif:
-        p1_pal[0]       = 0x004400
+        p1_pal[0]       = 0xD4F5DC
         lbl_p1_fan.text  = FAN_KARE[fan_idx]
-        lbl_p1_fan.color = 0x00FF44
-        lbl_p1_ad.color  = 0x00CC33
+        lbl_p1_fan.color = 0x0F7A34
+        lbl_p1_ad.color  = 0x0F7A34
     else:
-        p1_pal[0]       = 0x111111
+        p1_pal[0]       = 0xF0F0F3
         lbl_p1_fan.text  = FAN_DUR
-        lbl_p1_fan.color = 0x333333
-        lbl_p1_ad.color  = 0x333333
+        lbl_p1_fan.color = 0x9AA3B0
+        lbl_p1_ad.color  = 0x9AA3B0
 
     if p1_reg & M_Q4:
-        p2_pal[0]       = 0x004400
+        p2_pal[0]       = 0xD4F5DC
         lbl_p2_fan.text  = FAN_KARE[(fan_idx + 2) % 4]
-        lbl_p2_fan.color = 0x00FF44
-        lbl_p2_ad.color  = 0x00CC33
+        lbl_p2_fan.color = 0x0F7A34
+        lbl_p2_ad.color  = 0x0F7A34
     else:
-        p2_pal[0]       = 0x111111
+        p2_pal[0]       = 0xF0F0F3
         lbl_p2_fan.text  = FAN_DUR
-        lbl_p2_fan.color = 0x333333
-        lbl_p2_ad.color  = 0x333333
+        lbl_p2_fan.color = 0x9AA3B0
+        lbl_p2_ad.color  = 0x9AA3B0
 
     lbl_toplam_h.text = sure_format(elec_toplam_saniye())
 
     if now > mesaj_bitis and not alarm_aktif and sistem_ac:
         lbl_mesaj.text = ""
+
+    if not termo_banner_grp.hidden and now > termo_banner_bitis:
+        termo_banner_grp.hidden = True
 
 # ============================================================
 #  14. LOGO
@@ -1100,6 +1161,10 @@ def _ota_guncelle(url):
     print("OTA basliyor:", url)
     try:
         try:
+            ota_banner_goster("UZAKTAN GUNCELLEME", "Baslatiliyor...", 0x00CFFF)
+        except Exception:
+            pass
+        try:
             _mqtt_client.publish(TOPIC_OTA_STATUS, "OTA:BASLIYOR", retain=False)
         except Exception:
             pass
@@ -1108,15 +1173,29 @@ def _ota_guncelle(url):
         req = adafruit_requests.Session(_pool, ssl_ctx)
 
         try:
+            ota_banner_goster("INDIRILIYOR...", "GitHub'dan kod aliniyor", 0xFFAA00)
+        except Exception:
+            pass
+        try:
             _mqtt_client.publish(TOPIC_OTA_STATUS, "OTA:INDIRILIYOR", retain=False)
         except Exception:
             pass
 
-        response = req.get(url, timeout=30)
+        cache_buster = url + ("&" if "?" in url else "?") + "_ts=" + str(int(time.monotonic() * 1000))
+        response = req.get(cache_buster, timeout=30)
         if response.status_code != 200:
             print("OTA HTTP hatasi:", response.status_code)
             try:
+                ota_banner_goster("GUNCELLEME HATASI", f"HTTP {response.status_code}", 0xFF3333)
+            except Exception:
+                pass
+            try:
                 _mqtt_client.publish(TOPIC_OTA_STATUS, f"OTA:HATA:HTTP{response.status_code}", retain=False)
+            except Exception:
+                pass
+            time.sleep(4)
+            try:
+                ota_banner_gizle()
             except Exception:
                 pass
             return False
@@ -1124,6 +1203,10 @@ def _ota_guncelle(url):
         yeni_kod = response.text
         response.close()
 
+        try:
+            ota_banner_goster("YAZILIYOR...", f"{len(yeni_kod)} byte", 0xFF00CC)
+        except Exception:
+            pass
         try:
             _mqtt_client.publish(TOPIC_OTA_STATUS, f"OTA:YAZILIYOR:{len(yeni_kod)}byte", retain=False)
         except Exception:
@@ -1141,6 +1224,10 @@ def _ota_guncelle(url):
 
         print("OTA tamam, yeniden baslatiliyor...")
         try:
+            ota_banner_goster("GUNCELLEME TAMAM!", "Yeniden baslatiliyor...", 0x00FF88)
+        except Exception:
+            pass
+        try:
             _mqtt_client.publish(TOPIC_OTA_STATUS, "OTA:TAMAMLANDI:REBOOT", retain=False)
         except Exception:
             pass
@@ -1150,12 +1237,21 @@ def _ota_guncelle(url):
     except Exception as e:
         print("OTA hatasi:", e)
         try:
+            ota_banner_goster("GUNCELLEME HATASI", str(e)[:28], 0xFF3333)
+        except Exception:
+            pass
+        try:
             os.rename("/code_bak.py", "/code.py")
             print("Yedek geri yuklendi.")
         except Exception:
             pass
         try:
             _mqtt_client.publish(TOPIC_OTA_STATUS, f"OTA:HATA:{str(e)[:50]}", retain=False)
+        except Exception:
+            pass
+        time.sleep(4)
+        try:
+            ota_banner_gizle()
         except Exception:
             pass
         return False
@@ -1229,21 +1325,25 @@ time.sleep(0.1)
 buzzer_bip(0.1)
 
 p0_ham = 0xFF
-cur    = [0] * 5
-
 while True:
     try:
         now = time.monotonic()
+
+        buton_hizli_tara()  # bloklamadan once ilk hizli tarama
 
         sicaklik = read_ntc()
         sicaklik_son[0] = sicaklik
 
         ag_servis(now)
 
+        buton_hizli_tara()  # mqtt kontrolunden hemen sonra bir tarama daha
+
         if now - son_modbus >= 3.0:
-            son_akim = read_pzem_current()
+            son_akim = read_pzem_current()  # kendi icinde de butonlari tarar
             kwh_guncelle(now)
             son_modbus = now
+
+        buton_hizli_tara()
 
         if pca is not None:
             try:
@@ -1254,17 +1354,7 @@ while True:
 
         kontrol(sicaklik, now)
 
-        cur = [0] * 5
-        tus_var = False
-        if pca is not None:
-            try:
-                cur = [0] + [(p0_ham >> i) & 1 for i in range(1, 5)]
-                for i in range(1, 5):
-                    if cur[i] and not btn_prev[i]:
-                        tus_var = True
-                        break
-            except Exception:
-                pass
+        tus_var = any(btn_yakalanan[1:5])
 
         if mod == LOGO_MOD:
             if tus_var:
@@ -1284,7 +1374,9 @@ while True:
         elif mod == DERECE_MOD:
             if tus_var:
                 son_tus = now
-                buton_oku(cur)
+                buton_oku(btn_yakalanan)
+                for i in range(1, 5):
+                    btn_yakalanan[i] = False
             if logo_yuklu and (now - son_tus >= BOSTA_SURE):
                 mod = LOGO_MOD
                 display.root_group = logo_group
@@ -1293,9 +1385,6 @@ while True:
                 if now - son_ekran >= 0.5:
                     ekran_guncelle(sicaklik, son_akim, now)
                     son_ekran = now
-
-        for i in range(1, 5):
-            btn_prev[i] = bool(cur[i])
 
         if now - son_gc >= 15.0:
             gc.collect()
