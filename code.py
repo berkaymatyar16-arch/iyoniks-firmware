@@ -973,14 +973,14 @@ def kontrol(sicaklik, now):
             p1_aktif     = True
             p1_dongu_bas = 0.0
 
-    # P2 pompa (petek) - oda termostati YOK, sadece sicakliga gore calisir
-    if yaz_modu:
+    # P2 pompa (petek) - termostat KAPALIYKEN KESINLIKLE calismaz
+    if yaz_modu or not oda_termostat:
         p2_aktif = False
     elif sicaklik >= 70.0:
         p2_aktif = True
     elif sicaklik <= 65.0:
         p2_aktif = False
-    # 65-70C arasi: p2_aktif oldugu gibi kalir (histerezis)
+    # 65-70C arasi ve termostat acikken: p2_aktif oldugu gibi kalir (histerezis)
 
     # Elektrot kademesi
     if sicaklik >= 70.0:
