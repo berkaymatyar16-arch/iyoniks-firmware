@@ -540,6 +540,7 @@ gc.collect()
 _lbl("TOPLAM", 0xFFFFFF, 1, 4, 216, (0.0, 0.0))
 lbl_toplam_h = _lbl("0sn", 0x00FF88, 2, 58, 213, (0.0, 0.0))
 lbl_mesaj = _lbl("", 0xFFFFFF, 1, 316, 228, (1.0, 0.0))
+lbl_termo_durum = _lbl("", 0xFFFFFF, 1, 316, 217, (1.0, 0.0))
 
 gc.collect()
 
@@ -701,6 +702,8 @@ def termostat_oku(p0=None):
             termo_banner_goster("TERMOSTAT KAPALI", 0xCC3300, 5.0)
     termostat_prev = yeni
     oda_termostat  = yeni
+    lbl_termo_durum.text  = "TERMO: ACIK" if yeni else "TERMO: KAPALI"
+    lbl_termo_durum.color = 0x00CC00 if yeni else 0x999999
     return oda_termostat
 
 def fmt1(v):
