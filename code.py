@@ -40,10 +40,16 @@ OTA_URL = "https://raw.githubusercontent.com/berkaymatyar16-arch/iyoniks-firmwar
 DEVICE_ID = "1"
 
 TOPIC_OTA_COMMAND   = f"otacommand{DEVICE_ID}"
+TOPIC_MOD_COMMAND   = f"modcommand{DEVICE_ID}"
+TOPIC_MOD_STATUS    = f"modstatus{DEVICE_ID}"
 TOPIC_OTA_STATUS    = f"otastatus{DEVICE_ID}"
 TOPIC_NTC           = f"ntc{DEVICE_ID}"
 TOPIC_RELAY_STATUS  = f"relaystatus{DEVICE_ID}"
 TOPIC_AKIM          = f"akim{DEVICE_ID}"
+TOPIC_TERMO         = f"termo{DEVICE_ID}"
+TOPIC_ALARM         = f"alarm{DEVICE_ID}"
+TOPIC_TOPLAM        = f"toplam{DEVICE_ID}"
+TOPIC_KWH           = f"kwh{DEVICE_ID}"
 
 WIFI_RETRY_INTERVAL  = 30   # wifi kopuksa kac saniyede bir tekrar denesin
 MQTT_RETRY_INTERVAL  = 15   # mqtt kopuksa kac saniyede bir tekrar denesin
@@ -772,6 +778,50 @@ def buton_oku(basilanlar):
             sistem_ac = True
             mesaj_goster("SISTEM AKTIF", 3.0, 0x00FF88)
             buzzer_bip(0.1)
+    if press[1] or press[2] or press[3]:
+        _mod_durum_yayinla()
+
+def uzaktan_mod_uygula(cmd):
+    """
+    MQTT uzerinden gelen YAZ / KIS / STANDBY_AC / STANDBY_KAPA komutlarini
+    fiziksel butonlarla ayni mantikla uygular.
+    """
+    global yaz_modu, yaz_p1_bas65, yaz_p1_bas65ust
+    global standby_modu, donma_koruma, sistem_ac
+
+    if cmd == "YAZ":
+        yaz_modu = True
+        yaz_p1_bas65 = 0.0
+        yaz_p1_bas65ust = 0.0
+        buzzer_bip(0.1)
+        mesaj_goster("YAZ MODU (uzaktan)", 3.0, 0xFFDD00)
+    elif cmd == "KIS":
+        yaz_modu = False
+        yaz_p1_bas65 = 0.0
+        yaz_p1_bas65ust = 0.0
+        buzzer_bip(0.05)
+        mesaj_goster("KIS MODU (uzaktan)", 3.0, 0x88CCFF)
+    elif cmd == "STANDBY_AC":
+        standby_modu = True
+        donma_koruma = False
+        sistem_ac = False
+        buzzer_bip(0.05)
+        mesaj_goster("STANDBY (uzaktan)", 3.0, 0xAAAAAA)
+    elif cmd == "STANDBY_KAPA":
+        standby_modu = False
+        sistem_ac = True
+        buzzer_bip(0.1)
+        mesaj_goster("SISTEM AKTIF (uzaktan)", 3.0, 0x00FF88)
+    else:
+        return
+    _mod_durum_yayinla()
+
+def _mod_durum_yayinla():
+    try:
+        durum = f"YAZ:{int(yaz_modu)},STANDBY:{int(standby_modu)}"
+        _mqtt_client.publish(TOPIC_MOD_STATUS, durum, retain=True)
+    except Exception:
+        pass
 
 # ============================================================
 #  12. KONTROL
@@ -793,6 +843,10 @@ def kontrol(sicaklik, now):
         port1_uygula(False, False, False, False, False)
         elektrot_sure_guncelle(False, False, False, now)
         mesaj_goster("! ISI COK YUKSELDI !", 5.0, 0xFF0000)
+        try:
+            _mqtt_client.publish(TOPIC_ALARM, "AKTIF", retain=True)
+        except Exception:
+            pass
         return
 
     if alarm_aktif:
@@ -804,6 +858,10 @@ def kontrol(sicaklik, now):
             alarm_aktif  = False
             buzzer.value = False
             mesaj_goster("ALARM TEMIZLENDI", 3.0, 0xFFAA00)
+            try:
+                _mqtt_client.publish(TOPIC_ALARM, "TEMIZ", retain=True)
+            except Exception:
+                pass
         return
 
     if not sistem_ac:
@@ -1115,6 +1173,8 @@ def _mqtt_on_message(client_inner, topic, message):
                 _ota_guncelle(OTA_URL)
             elif msg.startswith("UPDATE:"):
                 _ota_guncelle(msg[7:].strip())
+        elif topic == TOPIC_MOD_COMMAND:
+            uzaktan_mod_uygula(msg)
     except Exception as e:
         print("MQTT mesaj isleme hatasi:", e)
 
@@ -1140,6 +1200,7 @@ def _mqtt_dene():
             _mqtt_client.on_message = _mqtt_on_message
         _mqtt_client.connect()
         _mqtt_client.subscribe(TOPIC_OTA_COMMAND)
+        _mqtt_client.subscribe(TOPIC_MOD_COMMAND)
         _mqtt_baglandi_mi = True
         print("MQTT baglandi.")
         return True
@@ -1163,6 +1224,10 @@ def _telemetri_yayinla():
         p1 = pca._p1 if pca else 0
         durum = f"Q0:{int(bool(p1 & M_Q0))},Q1:{int(bool(p1 & M_Q1))},Q2:{int(bool(p1 & M_Q2))},P1:{int(bool(p1 & M_Q3))},P2:{int(bool(p1 & M_Q4))}"
         _mqtt_client.publish(TOPIC_RELAY_STATUS, durum, retain=True)
+        _mqtt_client.publish(TOPIC_TERMO, "ACIK" if oda_termostat else "KAPALI", retain=True)
+        _mqtt_client.publish(TOPIC_TOPLAM, str(int(elec_toplam_saniye())), retain=True)
+        _mqtt_client.publish(TOPIC_KWH, str(round(kwh_bugun, 3)), retain=True)
+        _mqtt_client.publish(TOPIC_MOD_STATUS, f"YAZ:{int(yaz_modu)},STANDBY:{int(standby_modu)}", retain=True)
     except Exception as e:
         print("Telemetri yayin hatasi:", e)
 
