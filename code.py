@@ -194,7 +194,7 @@ def port1_kademeli_kapat():
         if yeni & bit:
             yeni = yeni & (~bit & 0xFF)
             pca.port1_yaz_eger_degistiyse(yeni)
-            time.sleep(0.04)
+            time.sleep(0.15)
 
 P2_AC_SICAKLIK   = 70.0
 P2_KAPA_SICAKLIK = 65.0
@@ -796,12 +796,18 @@ def buton_oku(basilanlar):
             mesaj_goster("SISTEM AKTIF", 3.0, 0x00FF88)
             buzzer_bip(0.1)
     if press[1] or press[2] or press[3]:
-        _mod_durum_yayinla()
+        _mod_durum_bekliyor[0] = True
 
 def uzaktan_mod_uygula(cmd):
     """
     MQTT uzerinden gelen YAZ / KIS / STANDBY_AC / STANDBY_KAPA komutlarini
     fiziksel butonlarla ayni mantikla uygular.
+    NOT: Bu fonksiyon MQTT'nin kendi mesaj callback'i icinden cagriliyor.
+    O yuzden burada DOGRUDAN _mqtt_client.publish() cagirmiyoruz -
+    ayni anda hem mesaj isleyip hem yeni mesaj gondermek MQTT
+    kutuphanesini kilitleyip karti resetleyebiliyordu. Bunun yerine
+    sadece bir bayrak birakiyoruz, gercek yayin ana donguде guvenli
+    bir noktada (ag_servis icinde) yapiliyor.
     """
     global yaz_modu, yaz_p1_bas65, yaz_p1_bas65ust
     global standby_modu, donma_koruma, sistem_ac
@@ -831,7 +837,9 @@ def uzaktan_mod_uygula(cmd):
         mesaj_goster("SISTEM AKTIF (uzaktan)", 3.0, 0x00FF88)
     else:
         return
-    _mod_durum_yayinla()
+    _mod_durum_bekliyor[0] = True
+
+_mod_durum_bekliyor = [False]  # liste = mutable, fonksiyonlar arasi kolay paylasim
 
 def _mod_durum_yayinla():
     try:
@@ -1377,6 +1385,10 @@ def ag_servis(now):
         if now - _son_mqtt_loop >= MQTT_LOOP_INTERVAL:
             _son_mqtt_loop = now
             _mqtt_client.loop(timeout=1)
+
+        if _mod_durum_bekliyor[0]:
+            _mod_durum_bekliyor[0] = False
+            _mod_durum_yayinla()
 
         if now - _son_telemetri >= TELEMETRI_INTERVAL:
             _son_telemetri = now
