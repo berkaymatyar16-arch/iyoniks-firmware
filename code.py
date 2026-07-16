@@ -179,6 +179,23 @@ M_Q2 = 0x20
 M_Q3 = 0x40
 M_Q4 = 0x80
 
+def port1_kademeli_kapat():
+    """
+    Tum roleleri (elektrotlar + pompalar) TEK SEFERDE degil, aralarinda
+    kisa gecikmeyle (birer birer) kapatir. Boylece ani, buyuk akim
+    degisimi engellenir - bu tur ani degisimler paylasilan guc kaynagini
+    zorlayip karti resetleyebiliyordu (brownout). Standby/donma koruma
+    gibi 'hepsini birden kapat' anlarinda kullanilir.
+    """
+    if pca is None:
+        return
+    yeni = pca._p1
+    for bit in (M_Q0, M_Q1, M_Q2, M_Q3, M_Q4):
+        if yeni & bit:
+            yeni = yeni & (~bit & 0xFF)
+            pca.port1_yaz_eger_degistiyse(yeni)
+            time.sleep(0.04)
+
 P2_AC_SICAKLIK   = 70.0
 P2_KAPA_SICAKLIK = 65.0
 VOLTAJ = 228.0
@@ -876,7 +893,7 @@ def kontrol(sicaklik, now):
                 if sicaklik >= DONMA_CIKIS:
                     donma_koruma = False
                     if pca:
-                        pca.port1_yaz_eger_degistiyse(0x00)
+                        port1_kademeli_kapat()
                     elektrot_sure_guncelle(False, False, False, now)
                     mesaj_goster("STANDBY", 3.0, 0xAAAAAA)
                     return
@@ -896,7 +913,7 @@ def kontrol(sicaklik, now):
         _q0_duty  = 0.0
         _q1_duty  = 0.0
         if pca:
-            pca.port1_yaz_eger_degistiyse(0x00)
+            port1_kademeli_kapat()
         elektrot_sure_guncelle(False, False, False, now)
         return
 
