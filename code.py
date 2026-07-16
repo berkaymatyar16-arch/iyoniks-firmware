@@ -677,7 +677,7 @@ def port1_uygula(q0_ac, q1_ac, q2_ac, p2_ac, p1_ac=True):
     pca.port1_yaz_eger_degistiyse(deger)
 
 def termostat_oku(p0=None):
-    global oda_termostat, termostat_prev, di_ham_p0
+    global oda_termostat, termostat_prev, di_ham_p0, di_ham_p1
     if pca is None:
         return oda_termostat
     if p0 is None:
@@ -685,8 +685,15 @@ def termostat_oku(p0=None):
             p0 = pca.port0_oku()
         except Exception:
             p0 = 0x00
+    try:
+        p1_raw = pca._r(1)
+    except Exception:
+        p1_raw = 0x00
     di_ham_p0 = p0
-    yeni = (p0 & 0b11100000) != 0
+    di_ham_p1 = p1_raw
+    p0_di = (p0 & 0b11100000) != 0
+    p1_di = (p1_raw & 0b00000111) != 0
+    yeni = p0_di or p1_di
     if termostat_prev is not None and yeni != termostat_prev:
         if yeni:
             termo_banner_goster("TERMOSTAT ACIK", 0x00CC00, 5.0)
