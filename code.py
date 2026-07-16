@@ -999,8 +999,8 @@ def kontrol(sicaklik, now):
         return
 
     if anot_dusus:
-        if sicaklik > 67.0:
-            # 70 -> 67C: hicbir elektrot calismaz
+        if sicaklik > 65.0:
+            # 70'ten sonra, 65'e dusene kadar: hicbir elektrot calismaz
             _q0_etkin = False
             _q1_etkin = False
             _q0_duty  = 0.0
@@ -1012,15 +1012,6 @@ def kontrol(sicaklik, now):
                 pca._p1 = ~deger & 0xFF
                 pca.port1_yaz_eger_degistiyse(deger)
             elektrot_sure_guncelle(False, False, False, now)
-            return
-        elif sicaklik > 65.0:
-            # 67 -> 65C: sadece Q2 calisir
-            _q0_etkin = False
-            _q1_etkin = False
-            _q0_duty  = 0.0
-            _q1_duty  = 0.0
-            port1_uygula(False, False, True, p2_aktif, p1_aktif)
-            elektrot_sure_guncelle(False, False, True, now)
             return
         else:
             anot_dusus = False
@@ -1302,15 +1293,44 @@ def _ota_guncelle(url):
             pass
 
         cache_buster = url + ("&" if "?" in url else "?") + "_ts=" + str(int(time.monotonic() * 1000))
-        response = req.get(cache_buster, timeout=30)
-        if response.status_code != 200:
-            print("OTA HTTP hatasi:", response.status_code)
+
+        yeni_kod = None
+        son_hata = None
+        for deneme in range(1, 4):
             try:
-                ota_banner_goster("GUNCELLEME HATASI", f"HTTP {response.status_code}", 0xFF3333)
+                if deneme > 1:
+                    try:
+                        ota_banner_goster("INDIRILIYOR...", f"Tekrar deneniyor ({deneme}/3)", 0xFFAA00)
+                    except Exception:
+                        pass
+                    try:
+                        _mqtt_client.publish(TOPIC_OTA_STATUS, f"OTA:TEKRAR:{deneme}", retain=False)
+                    except Exception:
+                        pass
+                    gc.collect()
+                    time.sleep(2)
+
+                response = req.get(cache_buster, timeout=30)
+                if response.status_code != 200:
+                    kod = response.status_code
+                    response.close()
+                    raise RuntimeError(f"HTTP {kod}")
+                yeni_kod = response.text
+                response.close()
+                break
+            except Exception as e:
+                son_hata = e
+                print(f"OTA indirme hatasi (deneme {deneme}/3):", e)
+                yeni_kod = None
+
+        if yeni_kod is None:
+            print("OTA HTTP hatasi:", son_hata)
+            try:
+                ota_banner_goster("GUNCELLEME HATASI", str(son_hata)[:28], 0xFF3333)
             except Exception:
                 pass
             try:
-                _mqtt_client.publish(TOPIC_OTA_STATUS, f"OTA:HATA:HTTP{response.status_code}", retain=False)
+                _mqtt_client.publish(TOPIC_OTA_STATUS, f"OTA:HATA:{str(son_hata)[:50]}", retain=False)
             except Exception:
                 pass
             time.sleep(4)
@@ -1319,9 +1339,6 @@ def _ota_guncelle(url):
             except Exception:
                 pass
             return False
-
-        yeni_kod = response.text
-        response.close()
 
         try:
             ota_banner_goster("YAZILIYOR...", f"{len(yeni_kod)} byte", 0xFF00CC)
