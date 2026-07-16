@@ -590,14 +590,17 @@ termo_banner_grp.append(lbl_termo_banner)
 termo_banner_grp.hidden = True
 splash.append(termo_banner_grp)  # en sonda -> en ustte cizilir
 
-termo_banner_bitis = 0.0
+termo_banner_bitis = None
+termo_banner_tip   = None  # "acik" veya "kapali"
 
-def termo_banner_goster(txt, renk, sure=5.0):
-    global termo_banner_bitis
+def termo_banner_goster(txt, renk, sure, tip):
+    global termo_banner_bitis, termo_banner_tip
     termo_bg_pal[0] = renk
     lbl_termo_banner.text = txt
     termo_banner_grp.hidden = False
-    termo_banner_bitis = time.monotonic() + sure
+    termo_banner_tip = tip
+    termo_banner_bitis = (time.monotonic() + sure) if sure is not None else None
+    lbl_termo_durum.text = ""  # buyuk banner acikken kucuk koseyazisi bosalsin
 
 gc.collect()
 
@@ -697,13 +700,11 @@ def termostat_oku(p0=None):
     yeni = p0_di or p1_di
     if termostat_prev is not None and yeni != termostat_prev:
         if yeni:
-            termo_banner_goster("TERMOSTAT ACIK", 0x00CC00, 5.0)
+            termo_banner_goster("TERMOSTAT ACIK", 0x00CC00, 5.0, "acik")
         else:
-            termo_banner_goster("TERMOSTAT KAPALI", 0xCC3300, 5.0)
+            termo_banner_goster("TERMOSTAT KAPALI", 0xCC3300, None, "kapali")
     termostat_prev = yeni
     oda_termostat  = yeni
-    lbl_termo_durum.text  = "TERMO: ACIK" if yeni else "TERMO: KAPALI"
-    lbl_termo_durum.color = 0x00CC00 if yeni else 0x999999
     return oda_termostat
 
 def fmt1(v):
@@ -1050,8 +1051,12 @@ def ekran_guncelle(sicaklik, akim, now):
     if now > mesaj_bitis and not alarm_aktif and sistem_ac:
         lbl_mesaj.text = ""
 
-    if not termo_banner_grp.hidden and now > termo_banner_bitis:
+    if (not termo_banner_grp.hidden and termo_banner_bitis is not None
+            and now > termo_banner_bitis):
         termo_banner_grp.hidden = True
+        if termo_banner_tip == "acik":
+            lbl_termo_durum.text  = "TERMO: ACIK"
+            lbl_termo_durum.color = 0x00CC00
 
 # ============================================================
 #  14. LOGO
