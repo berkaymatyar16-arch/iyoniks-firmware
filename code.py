@@ -647,10 +647,10 @@ gc.collect()
 # ============================================================
 
 sistem_ac      = True
-hedef_sicaklik = 70
+hedef_sicaklik = 50
 alarm_aktif    = False
-alarm_esigi    = 80
-alarm_reset    = 65
+alarm_esigi    = 60
+alarm_reset    = 50
 p2_aktif       = False
 oda_termostat  = False
 anot_dusus     = False
@@ -963,7 +963,7 @@ def kontrol(sicaklik, now):
             p1_aktif = sure < 30.0
             yaz_p1_bas65ust = 0.0
     else:
-        if 60.0 <= sicaklik <= 65.0:
+        if sicaklik < 45.0:
             if p1_dongu_bas == 0.0:
                 p1_dongu_bas = now
                 p1_aktif = True
@@ -973,17 +973,24 @@ def kontrol(sicaklik, now):
             p1_aktif     = True
             p1_dongu_bas = 0.0
 
-    # P2 pompa (petek) - termostat KAPALIYKEN KESINLIKLE calismaz
-    if yaz_modu or not oda_termostat:
+    # P2 pompa (petek) - yerden isitma: 50'de acilir, 45'e inene kadar kapanmaz
+    _p2_eski = p2_aktif
+    if yaz_modu:
         p2_aktif = False
-    elif sicaklik >= 70.0:
+    elif sicaklik >= 50.0:
         p2_aktif = True
-    elif sicaklik <= 65.0:
+    elif sicaklik <= 45.0:
         p2_aktif = False
-    # 65-70C arasi ve termostat acikken: p2_aktif oldugu gibi kalir (histerezis)
+    # 45-50C arasi: p2_aktif oldugu gibi kalir (histerezis)
+    if p2_aktif != _p2_eski:
+        try:
+            with open("/p2_log.txt", "a") as _f:
+                _f.write(f"t={now:.1f} sicaklik={sicaklik} yaz={yaz_modu} P2: {_p2_eski}->{p2_aktif}\n")
+        except Exception:
+            pass
 
-    # Elektrot kademesi
-    if sicaklik >= 70.0:
+    # Elektrot kademesi (yerden isitma: 45/50C esikleri)
+    if sicaklik >= 50.0:
         anot_dusus = True
         _q0_etkin = False
         _q1_etkin = False
@@ -999,8 +1006,8 @@ def kontrol(sicaklik, now):
         return
 
     if anot_dusus:
-        if sicaklik > 65.0:
-            # 70'ten sonra, 65'e dusene kadar: hicbir elektrot calismaz
+        if sicaklik > 45.0:
+            # 50'den sonra, 45'e dusene kadar: hicbir elektrot calismaz
             _q0_etkin = False
             _q1_etkin = False
             _q0_duty  = 0.0
@@ -1017,21 +1024,16 @@ def kontrol(sicaklik, now):
             anot_dusus = False
 
     q2_ac = False
-    if sicaklik >= 65.0:
-        # 65-70C bandi: Q1 ve Q2 calisir (Q0 kapali)
+    if sicaklik >= 45.0:
+        # 45-50C bandi: Q1 ve Q2 calisir (Q0 kapali)
         _q0_etkin = False
         _q1_etkin = True
         _q0_duty  = 0.0
         _q1_duty  = 1.0
         q2_ac     = True
         port1_uygula(False, True, True, p2_aktif, p1_aktif)
-    elif sicaklik >= 60.0:
-        _q0_etkin = True
-        _q1_etkin = True
-        _q0_duty  = 1.0
-        _q1_duty  = 1.0
-        port1_uygula(True, True, False, p2_aktif, p1_aktif)
     else:
+        # 0-45C: 3 elektrot
         q2_ac     = True
         _q0_etkin = True
         _q1_etkin = True
