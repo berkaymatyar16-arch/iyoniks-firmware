@@ -481,15 +481,15 @@ eq_w = 96
 eq_h = 50
 eq_bmp0 = displayio.Bitmap(eq_w, eq_h, 1)
 eq_pal0 = displayio.Palette(1)
-eq_pal0[0] = 0xF0F0F3
+eq_pal0[0] = 0xFFF3C4
 splash.append(displayio.TileGrid(eq_bmp0, pixel_shader=eq_pal0, x=8,   y=107))
 eq_bmp1 = displayio.Bitmap(eq_w, eq_h, 1)
 eq_pal1 = displayio.Palette(1)
-eq_pal1[0] = 0xF0F0F3
+eq_pal1[0] = 0xFFF3C4
 splash.append(displayio.TileGrid(eq_bmp1, pixel_shader=eq_pal1, x=112, y=107))
 eq_bmp2 = displayio.Bitmap(eq_w, eq_h, 1)
 eq_pal2 = displayio.Palette(1)
-eq_pal2[0] = 0xF0F0F3
+eq_pal2[0] = 0xFFF3C4
 splash.append(displayio.TileGrid(eq_bmp2, pixel_shader=eq_pal2, x=216, y=107))
 eq_pal_list = [eq_pal0, eq_pal1, eq_pal2]
 
@@ -497,12 +497,12 @@ gc.collect()
 
 p1_bmp = displayio.Bitmap(156, 50, 1)
 p1_pal = displayio.Palette(1)
-p1_pal[0] = 0xF0F0F3
+p1_pal[0] = 0xFFF3C4
 splash.append(displayio.TileGrid(p1_bmp, pixel_shader=p1_pal, x=2, y=159))
 
 p2_bmp = displayio.Bitmap(156, 50, 1)
 p2_pal = displayio.Palette(1)
-p2_pal[0] = 0xF0F0F3
+p2_pal[0] = 0xFFF3C4
 splash.append(displayio.TileGrid(p2_bmp, pixel_shader=p2_pal, x=161, y=159))
 
 alt_bmp = displayio.Bitmap(320, 29, 1)
@@ -566,12 +566,12 @@ FAN_DUR  = " +"
 fan_idx  = 0
 son_fan  = 0.0
 
-lbl_p1_fan = _lbl(FAN_DUR,    0x9AA3B0, 2, 8,   178, (0.0, 0.0))
-lbl_p1_ad  = _lbl("P1 KAZAN", 0x9AA3B0, 1, 44,  180, (0.0, 0.0))
-lbl_p1_alt = _lbl("",         0x9AA3B0, 1, 44,  192, (0.0, 0.0))
-lbl_p2_fan = _lbl(FAN_DUR,    0x9AA3B0, 2, 169, 178, (0.0, 0.0))
-lbl_p2_ad  = _lbl("P2 PETEK", 0x9AA3B0, 1, 205, 180, (0.0, 0.0))
-lbl_p2_alt = _lbl("",         0x9AA3B0, 1, 205, 192, (0.0, 0.0))
+lbl_p1_fan = _lbl(FAN_DUR,    0xB8860B, 2, 8,   178, (0.0, 0.0))
+lbl_p1_ad  = _lbl("P1 KAZAN", 0xB8860B, 1, 44,  180, (0.0, 0.0))
+lbl_p1_alt = _lbl("",         0xB8860B, 1, 44,  192, (0.0, 0.0))
+lbl_p2_fan = _lbl(FAN_DUR,    0xB8860B, 2, 169, 178, (0.0, 0.0))
+lbl_p2_ad  = _lbl("P2 PETEK", 0xB8860B, 1, 205, 180, (0.0, 0.0))
+lbl_p2_alt = _lbl("",         0xB8860B, 1, 205, 192, (0.0, 0.0))
 
 gc.collect()
 
@@ -1102,13 +1102,13 @@ def ekran_guncelle(sicaklik, akim, now):
     for i in range(3):
         aktif = sq_durumlar[i]
         if aktif:
-            eq_pal_list[i][0]    = 0xD4F5DC
-            lbl_eq_isim[i].color = 0x0F7A34
-            lbl_eq_saat[i].color = 0x0F7A34
+            eq_pal_list[i][0]    = 0xFFD6D6
+            lbl_eq_isim[i].color = 0xCC0000
+            lbl_eq_saat[i].color = 0xCC0000
         else:
-            eq_pal_list[i][0]    = 0xF0F0F3
-            lbl_eq_isim[i].color = 0x9AA3B0
-            lbl_eq_saat[i].color = 0x9AA3B0
+            eq_pal_list[i][0]    = 0xFFF3C4
+            lbl_eq_isim[i].color = 0xB8860B
+            lbl_eq_saat[i].color = 0xB8860B
         lbl_eq_saat[i].text = sure_format(elec_saniye(i))
 
     if now - son_fan >= 0.20:
@@ -1116,26 +1116,26 @@ def ekran_guncelle(sicaklik, akim, now):
         son_fan = now
 
     if sistem_ac and not alarm_aktif and p1_aktif:
-        p1_pal[0]       = 0xD4F5DC
+        p1_pal[0]       = 0xFFD6D6
         lbl_p1_fan.text  = FAN_KARE[fan_idx]
-        lbl_p1_fan.color = 0x0F7A34
-        lbl_p1_ad.color  = 0x0F7A34
+        lbl_p1_fan.color = 0xCC0000
+        lbl_p1_ad.color  = 0xCC0000
     else:
-        p1_pal[0]       = 0xF0F0F3
+        p1_pal[0]       = 0xFFF3C4
         lbl_p1_fan.text  = FAN_DUR
-        lbl_p1_fan.color = 0x9AA3B0
-        lbl_p1_ad.color  = 0x9AA3B0
+        lbl_p1_fan.color = 0xB8860B
+        lbl_p1_ad.color  = 0xB8860B
 
     if p1_reg & M_Q4:
-        p2_pal[0]       = 0xD4F5DC
+        p2_pal[0]       = 0xFFD6D6
         lbl_p2_fan.text  = FAN_KARE[(fan_idx + 2) % 4]
-        lbl_p2_fan.color = 0x0F7A34
-        lbl_p2_ad.color  = 0x0F7A34
+        lbl_p2_fan.color = 0xCC0000
+        lbl_p2_ad.color  = 0xCC0000
     else:
-        p2_pal[0]       = 0xF0F0F3
+        p2_pal[0]       = 0xFFF3C4
         lbl_p2_fan.text  = FAN_DUR
-        lbl_p2_fan.color = 0x9AA3B0
-        lbl_p2_ad.color  = 0x9AA3B0
+        lbl_p2_fan.color = 0xB8860B
+        lbl_p2_ad.color  = 0xB8860B
 
     lbl_toplam_h.text = sure_format(elec_toplam_saniye())
 
