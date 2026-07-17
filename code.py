@@ -50,9 +50,9 @@ MQTT_PASS   = "Iyoniks123"
 MQTT_PORT   = 8883
 CLIENT_ID   = "anka_kombi_1"
 
-OTA_URL = "https://raw.githubusercontent.com/berkaymatyar16-arch/iyoniks-firmware/main/code.py"
+OTA_URL = "https://raw.githubusercontent.com/berkaymatyar16-arch/iyoniks-firmware/main/code_konya.py"
 
-DEVICE_ID = "1"
+DEVICE_ID = "2"  # KONYA BAYII - yerden isitma kombisi
 
 TOPIC_OTA_COMMAND   = f"otacommand{DEVICE_ID}"
 TOPIC_MOD_COMMAND   = f"modcommand{DEVICE_ID}"
