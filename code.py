@@ -24,16 +24,33 @@ import adafruit_requests
 #  0a. RESET NEDENI GUNLUGU (Thonny gerekmeden, Not Defteri ile
 #      okunabilecek bir dosyaya her acilista neden resetlendigini yazar)
 # ============================================================
+
+LOG_MAX_BAYT = 20000  # ~20KB - bu siniri gecen log dosyasi otomatik sifirlanir
+                       # (kucuk flash'ta log dosyalarinin sinirsiz buyumesini onler)
+
+def _log_yaz_sinirli(yol, satir):
+    """Dosyaya bir satir ekler; dosya LOG_MAX_BAYT'i asmissa once sifirlayip
+    baslar. Boylece hata_log.txt / p2_log.txt gibi 'a' modunda surekli
+    buyuyen loglar zamanla flash'i doldurmaz."""
+    try:
+        try:
+            boyut = os.stat(yol)[6]
+        except Exception:
+            boyut = 0
+        mod = "w" if boyut > LOG_MAX_BAYT else "a"
+        with open(yol, mod) as _f:
+            if mod == "w":
+                _f.write("--- log boyut sinirini asti, sifirlandi ---\n")
+            _f.write(satir)
+    except Exception:
+        pass
+
 try:
     _sebep = str(microcontroller.cpu.reset_reason)
 except Exception as _e:
     _sebep = "OKUNAMADI: " + str(_e)
 
-try:
-    with open("/hata_log.txt", "a") as _f:
-        _f.write("Acilis - reset_reason: " + _sebep + "\n")
-except Exception:
-    pass
+_log_yaz_sinirli("/hata_log.txt", "Acilis - reset_reason: " + _sebep + "\n")
 
 # ============================================================
 #  0. OTA / MQTT AYARLARI
@@ -52,7 +69,7 @@ CLIENT_ID   = "anka_kombi_1"
 
 OTA_URL = "https://raw.githubusercontent.com/berkaymatyar16-arch/iyoniks-firmware/main/code.py"
 
-DEVICE_ID = "2"  # KONYA BAYII - yerden isitma kombisi
+DEVICE_ID = "3"  # NORMAL KOMBI - radyatorlu, 70C bazli
 
 TOPIC_OTA_COMMAND   = f"otacommand{DEVICE_ID}"
 TOPIC_MOD_COMMAND   = f"modcommand{DEVICE_ID}"
@@ -65,6 +82,8 @@ TOPIC_TERMO         = f"termo{DEVICE_ID}"
 TOPIC_ALARM         = f"alarm{DEVICE_ID}"
 TOPIC_TOPLAM        = f"toplam{DEVICE_ID}"
 TOPIC_KWH           = f"kwh{DEVICE_ID}"
+TOPIC_KWH_TOPLAM    = f"kwhtoplam{DEVICE_ID}"
+TOPIC_KWH_AY        = f"kwhay{DEVICE_ID}"
 
 WIFI_RETRY_INTERVAL  = 30   # wifi kopuksa kac saniyede bir tekrar denesin
 MQTT_RETRY_INTERVAL  = 15   # mqtt kopuksa kac saniyede bir tekrar denesin
@@ -226,6 +245,51 @@ elec_bas  = [None, None, None]
 kwh_bugun  = 0.0
 kwh_son_t  = None
 
+# ---- Kalici (flash'a yazilan) kumulatif kWh - reset/OTA sonrasi kaybolmaz ----
+KWH_DOSYA = "/kwh_toplam.txt"
+KWH_KAYIT_ARALIK = 900.0  # flash asinmasini azaltmak icin 15 dakikada bir yazilir
+
+kwh_toplam = 0.0
+try:
+    with open(KWH_DOSYA, "r") as _f:
+        kwh_toplam = float(_f.read().strip())
+except Exception:
+    kwh_toplam = 0.0
+
+_son_kwh_kayit = 0.0
+
+def kwh_kaydet():
+    """Kumulatif kWh degerini flash'a yazar. Sik cagirilmamali (asinma)."""
+    try:
+        with open(KWH_DOSYA, "w") as _f:
+            _f.write(str(round(kwh_toplam, 4)))
+    except Exception as e:
+        print("KWH kayit hatasi:", e)
+
+# ---- Aylik kWh: sadece biriktirir, sifirlama KART UZERINDEKI 4. BUTONLA yapilir ----
+# (Takvim/RTC yok - "ay bittiginde" sifirlamak kullaniciya/dealer'a ait bir karar)
+AY_DOSYA = "/kwh_ay.txt"
+
+kwh_ay = 0.0
+try:
+    with open(AY_DOSYA, "r") as _f:
+        kwh_ay = float(_f.read().strip())
+except Exception:
+    kwh_ay = 0.0
+
+def kwh_ay_kaydet():
+    try:
+        with open(AY_DOSYA, "w") as _f:
+            _f.write(str(round(kwh_ay, 4)))
+    except Exception as e:
+        print("AY kayit hatasi:", e)
+
+def kwh_ay_sifirla():
+    """4 numarali (bosta duran) fiziksel butona basildiginda cagrilir."""
+    global kwh_ay
+    kwh_ay = 0.0
+    kwh_ay_kaydet()
+
 def elektrot_sure_guncelle(q0a, q1a, q2a, now):
     aktifler = [q0a, q1a, q2a]
     for i in range(3):
@@ -242,14 +306,17 @@ def elektrot_sure_guncelle(q0a, q1a, q2a, now):
         elec_on[i] = aktifler[i]
 
 def kwh_guncelle(now):
-    global kwh_bugun, kwh_son_t
+    global kwh_bugun, kwh_son_t, kwh_toplam, kwh_ay
     if _pzem_akim is None or _pzem_voltaj is None:
         kwh_son_t = now
         return
     watt = _pzem_akim * _pzem_voltaj
     if kwh_son_t is not None:
         dt_h = (now - kwh_son_t) / 3600.0
-        kwh_bugun += (watt / 1000.0) * dt_h
+        artis = (watt / 1000.0) * dt_h
+        kwh_bugun  += artis
+        kwh_toplam += artis
+        kwh_ay     += artis
     kwh_son_t = now
 
 def elec_saat(i):
@@ -455,71 +522,114 @@ def ssr_guncelle(now):
 splash = displayio.Group()
 display.root_group = splash
 
+# Zemin: saf beyaz yerine cok hafif serin gri - kartlar daha 'yuzuyor' hissi verir
 bg_bmp = displayio.Bitmap(320, 240, 1)
 bg_pal = displayio.Palette(1)
-bg_pal[0] = 0xFFFFFF
+bg_pal[0] = 0xF4F6F9
 splash.append(displayio.TileGrid(bg_bmp, pixel_shader=bg_pal))
 
 hdr_bmp = displayio.Bitmap(320, 18, 1)
 hdr_pal = displayio.Palette(1)
-hdr_pal[0] = 0x1B4D89
+hdr_pal[0] = 0x2541B2
 splash.append(displayio.TileGrid(hdr_bmp, pixel_shader=hdr_pal, x=0, y=0))
 
-sic_cerceve_bmp = displayio.Bitmap(316, 86, 1)
-sic_cerceve_pal = displayio.Palette(1)
-sic_cerceve_pal[0] = 0x0055AA
-splash.append(displayio.TileGrid(sic_cerceve_bmp, pixel_shader=sic_cerceve_pal, x=2, y=19))
+def _daire_ciz(bmp, cx, cy, r, deger):
+    """Basit piksel-piksel dolu daire tarama algoritmasi (ek kutuphane gerekmez)."""
+    r2 = r * r
+    for yy in range(max(0, cy - r), min(bmp.height, cy + r + 1)):
+        dy = yy - cy
+        for xx in range(max(0, cx - r), min(bmp.width, cx + r + 1)):
+            dx = xx - cx
+            if dx * dx + dy * dy <= r2:
+                bmp[xx, yy] = deger
 
-sic_ic_bmp = displayio.Bitmap(312, 82, 1)
-sic_ic_pal = displayio.Palette(1)
-sic_ic_pal[0] = 0xF0F4F8
-splash.append(displayio.TileGrid(sic_ic_bmp, pixel_shader=sic_ic_pal, x=4, y=21))
+def _rozet(cap, renk, x, y):
+    """Kucuk dolu daire seklinde bir 'ikon rozeti' olusturur. Rengi sonradan
+    donen palete atama yapilarak (pal[1] = ...) canli degistirilebilir."""
+    bmp = displayio.Bitmap(cap, cap, 2)
+    pal = displayio.Palette(2)
+    pal[0] = 0x000000
+    pal.make_transparent(0)
+    pal[1] = renk
+    r = cap // 2
+    _daire_ciz(bmp, r, r, r - 1, 1)
+    splash.append(displayio.TileGrid(bmp, pixel_shader=pal, x=x, y=y))
+    return pal
+
+def _kose_yamasi(x, y, r, arka_renk, konum):
+    """Bir kartin tek kosesine, kartin GERCEKTE arkasinda duran zemin
+    rengiyle (arka_renk) kucuk bir ceyrek-daire yamasi cizer. Boylece
+    duz dikdortgen kart, optik olarak yuvarlak koseli gorunur - ekstra
+    kutuphane veya bitmap dosyasi gerekmeden."""
+    bmp = displayio.Bitmap(r, r, 2)
+    pal = displayio.Palette(2)
+    pal[0] = 0x000000
+    pal.make_transparent(0)
+    pal[1] = arka_renk
+    for yy in range(r):
+        for xx in range(r):
+            if konum == "sol-ust":
+                disi = (xx - r) ** 2 + (yy - r) ** 2 > r * r
+            elif konum == "sag-ust":
+                disi = xx ** 2 + (yy - r) ** 2 > r * r
+            elif konum == "sol-alt":
+                disi = (xx - r) ** 2 + yy ** 2 > r * r
+            else:  # sag-alt
+                disi = xx ** 2 + yy ** 2 > r * r
+            bmp[xx, yy] = 1 if disi else 0
+    splash.append(displayio.TileGrid(bmp, pixel_shader=pal, x=x, y=y))
+
+def _kart(x, y, w, h, renk, r=7, arka_renk=0xF4F6F9):
+    """Duz renkli bir kart (dikdortgen) cizer, ardindan 4 kosesine optik
+    yuvarlatma yamasi ekler. Kartin canli renk degistirilebilmesi icin
+    paleti dondurur."""
+    bmp = displayio.Bitmap(w, h, 1)
+    pal = displayio.Palette(1)
+    pal[0] = renk
+    splash.append(displayio.TileGrid(bmp, pixel_shader=pal, x=x, y=y))
+    _kose_yamasi(x,         y,         r, arka_renk, "sol-ust")
+    _kose_yamasi(x + w - r, y,         r, arka_renk, "sag-ust")
+    _kose_yamasi(x,         y + h - r, r, arka_renk, "sol-alt")
+    _kose_yamasi(x + w - r, y + h - r, r, arka_renk, "sag-alt")
+    return pal
 
 gc.collect()
 
-eq_w = 96
-eq_h = 50
-eq_bmp0 = displayio.Bitmap(eq_w, eq_h, 1)
-eq_pal0 = displayio.Palette(1)
-eq_pal0[0] = 0xFFFFFF
-splash.append(displayio.TileGrid(eq_bmp0, pixel_shader=eq_pal0, x=8,   y=107))
-eq_bmp1 = displayio.Bitmap(eq_w, eq_h, 1)
-eq_pal1 = displayio.Palette(1)
-eq_pal1[0] = 0xFFFFFF
-splash.append(displayio.TileGrid(eq_bmp1, pixel_shader=eq_pal1, x=112, y=107))
-eq_bmp2 = displayio.Bitmap(eq_w, eq_h, 1)
-eq_pal2 = displayio.Palette(1)
-eq_pal2[0] = 0xFFFFFF
-splash.append(displayio.TileGrid(eq_bmp2, pixel_shader=eq_pal2, x=216, y=107))
+# ---- Ust satir: KAZAN karti (tam genislik - elektrik karti kaldirildi) ----
+sic_kart_pal = _kart(4, 22, 312, 72, 0xFFFFFF, r=8, arka_renk=0xF4F6F9)
+
+gc.collect()
+
+# ---- Elektrot kutulari: 3 esit kart, aralarinda 4px bosluk ----
+EQ_X = [4, 109, 214]
+EQ_W = [101, 101, 102]
+eq_pal0 = _kart(EQ_X[0], 98, EQ_W[0], 44, 0xFFFFFF, r=7, arka_renk=0xF4F6F9)
+eq_pal1 = _kart(EQ_X[1], 98, EQ_W[1], 44, 0xFFFFFF, r=7, arka_renk=0xF4F6F9)
+eq_pal2 = _kart(EQ_X[2], 98, EQ_W[2], 44, 0xFFFFFF, r=7, arka_renk=0xF4F6F9)
 eq_pal_list = [eq_pal0, eq_pal1, eq_pal2]
 
 gc.collect()
 
-p1_bmp = displayio.Bitmap(156, 50, 1)
-p1_pal = displayio.Palette(1)
-p1_pal[0] = 0xFFFFFF
-splash.append(displayio.TileGrid(p1_bmp, pixel_shader=p1_pal, x=2, y=159))
-
-p2_bmp = displayio.Bitmap(156, 50, 1)
-p2_pal = displayio.Palette(1)
-p2_pal[0] = 0xFFFFFF
-splash.append(displayio.TileGrid(p2_bmp, pixel_shader=p2_pal, x=161, y=159))
-
-alt_bmp = displayio.Bitmap(320, 29, 1)
-alt_pal = displayio.Palette(1)
-alt_pal[0] = 0x1B4D89
-splash.append(displayio.TileGrid(alt_bmp, pixel_shader=alt_pal, x=0, y=211))
+# ---- Pompa kutulari: 2 esit kart, aralarinda 4px bosluk ----
+p1_pal = _kart(4,   146, 154, 44, 0xFFFFFF, r=7, arka_renk=0xF4F6F9)
+p2_pal = _kart(162, 146, 154, 44, 0xFFFFFF, r=7, arka_renk=0xF4F6F9)
 
 gc.collect()
 
-sbar_bg_bmp = displayio.Bitmap(150, 5, 1)
+# ---- Alt bilgi karti: SURE / TERMO - ekrandan kenar bosluklu, tek karti ----
+# (AYLIK kWh gostergesi kaldirildi -> 2 kolonlu duzen)
+alt_pal = _kart(4, 194, 312, 42, 0x2541B2, r=8, arka_renk=0xF4F6F9)
+
+gc.collect()
+
+sbar_bg_bmp = displayio.Bitmap(184, 4, 1)
 sbar_bg_pal = displayio.Palette(1)
-sbar_bg_pal[0] = 0xF0F0F3
-splash.append(displayio.TileGrid(sbar_bg_bmp, pixel_shader=sbar_bg_pal, x=4, y=97))
-sbar_fg_bmp = displayio.Bitmap(1, 5, 1)
+sbar_bg_pal[0] = 0xCBD5E1
+splash.append(displayio.TileGrid(sbar_bg_bmp, pixel_shader=sbar_bg_pal, x=12, y=86))
+sbar_fg_bmp = displayio.Bitmap(1, 4, 1)
 sbar_fg_pal = displayio.Palette(1)
-sbar_fg_pal[0] = 0x0066FF
-sbar_tile = displayio.TileGrid(sbar_fg_bmp, pixel_shader=sbar_fg_pal, x=4, y=97)
+sbar_fg_pal[0] = 0x06B6D4
+sbar_tile = displayio.TileGrid(sbar_fg_bmp, pixel_shader=sbar_fg_pal, x=12, y=86)
 splash.append(sbar_tile)
 sbar_w = 0
 
@@ -534,30 +644,34 @@ def _lbl(txt, color, scale, x, y, anchor=(0.0, 0.0)):
     return l
 
 lbl_baslik = _lbl("IYONiKS KOMBI", 0xFFFFFF, 1, 4,   4)
-lbl_ver    = _lbl("v2.4-BEYAZ",   0x5A7A9A, 1, 250,  4)
-lbl_durum  = _lbl("* AKTiF",       0x00FF88, 1, 155,  4)
-lbl_mod    = _lbl("* KIS *",       0x88CCFF, 1, 230,  4)
+lbl_ver    = _lbl("v2.5",          0xFFFFFF, 1, 282,  4)
+lbl_durum  = _lbl("* AKTiF",       0x2FE87D, 1, 130,  4)
+lbl_mod    = _lbl("* KIS *",       0x38BDF8, 1, 224,  4)
 
 gc.collect()
 
-_lbl("KAZAN", 0x5A7A9A, 1, 160, 18, (0.5, 0.0))
-lbl_sicaklik = _lbl("--.-", 0x0A2A4A, 5, 160, 28, (0.5, 0.0))
-_lbl("C", 0x5A7A9A, 2, 242, 55, (0.0, 0.0))
-lbl_hd = _lbl("HEDEF 70C", 0x5A7A9A, 1, 160, 88, (0.5, 0.0))
+_lbl("KAZAN", 0x334155, 1, 160, 28, (0.5, 0.0))
+lbl_sicaklik = _lbl("--.-", 0xE8491F, 4, 160, 40, (0.5, 0.0))
+_lbl("C", 0x334155, 2, 224, 50, (0.0, 0.0))
+lbl_hd = _lbl("HEDEF 70C", 0x334155, 1, 12, 76, (0.0, 0.0))
 
 gc.collect()
 
-gc.collect()
+# ---- Elektrik karti (Voltaj / Amper / Watt) kaldirildi ----
 
-EQ_CX   = [56, 160, 264]
-EQ_ISIM = ["Q0", "Q1", "Q2"]
-lbl_eq_isim = []
-lbl_eq_saat = []
+EQ_CX      = [EQ_X[0] + EQ_W[0] // 2, EQ_X[1] + EQ_W[1] // 2, EQ_X[2] + EQ_W[2] // 2]
+EQ_BADGE_X = [EQ_X[0] + EQ_W[0] - 24, EQ_X[1] + EQ_W[1] - 24, EQ_X[2] + EQ_W[2] - 24]
+EQ_ISIM    = ["Q0", "Q1", "Q2"]
+lbl_eq_isim   = []
+lbl_eq_saat   = []
+eq_badge_pal  = []
 for i in range(3):
-    li = _lbl(EQ_ISIM[i], 0xFF5555, 2, EQ_CX[i], 111, (0.5, 0.0))
-    ls = _lbl("0sn",       0xFF8888, 2, EQ_CX[i], 132, (0.5, 0.0))
+    li = _lbl(EQ_ISIM[i], 0xFF5555, 2, EQ_CX[i], 104, (0.5, 0.0))
+    ls = _lbl("0sn",       0xFF8888, 1, EQ_CX[i], 127, (0.5, 0.0))
+    bp = _rozet(14, 0x64748B, EQ_BADGE_X[i], 102)
     lbl_eq_isim.append(li)
     lbl_eq_saat.append(ls)
+    eq_badge_pal.append(bp)
 
 gc.collect()
 
@@ -566,19 +680,30 @@ FAN_DUR  = " +"
 fan_idx  = 0
 son_fan  = 0.0
 
-lbl_p1_fan = _lbl(FAN_DUR,    0xB8860B, 2, 8,   178, (0.0, 0.0))
-lbl_p1_ad  = _lbl("P1 KAZAN", 0xB8860B, 1, 44,  180, (0.0, 0.0))
-lbl_p1_alt = _lbl("",         0xB8860B, 1, 44,  192, (0.0, 0.0))
-lbl_p2_fan = _lbl(FAN_DUR,    0xB8860B, 2, 169, 178, (0.0, 0.0))
-lbl_p2_ad  = _lbl("P2 PETEK", 0xB8860B, 1, 205, 180, (0.0, 0.0))
-lbl_p2_alt = _lbl("",         0xB8860B, 1, 205, 192, (0.0, 0.0))
+lbl_p1_fan = _lbl(FAN_DUR,    0x334155, 2, 12,  163, (0.0, 0.0))
+lbl_p1_ad  = _lbl("P1 KAZAN", 0x334155, 1, 48,  165, (0.0, 0.0))
+lbl_p1_alt = _lbl("",         0x334155, 1, 48,  177, (0.0, 0.0))
+lbl_p2_fan = _lbl(FAN_DUR,    0x334155, 2, 170, 163, (0.0, 0.0))
+lbl_p2_ad  = _lbl("P2 PETEK", 0x334155, 1, 206, 165, (0.0, 0.0))
+lbl_p2_alt = _lbl("",         0x334155, 1, 206, 177, (0.0, 0.0))
 
 gc.collect()
 
-_lbl("TOPLAM", 0xFFFFFF, 1, 4, 216, (0.0, 0.0))
-lbl_toplam_h = _lbl("0sn", 0x00FF88, 2, 58, 213, (0.0, 0.0))
-lbl_mesaj = _lbl("", 0xFFFFFF, 1, 316, 228, (1.0, 0.0))
-lbl_termo_durum = _lbl("", 0xFFFFFF, 1, 316, 217, (1.0, 0.0))
+# ---- Alt kart icerigi: 2 esit sutun (SURE / TERMO) - AYLIK kWh kaldirildi ----
+div1_bmp = displayio.Bitmap(1, 34, 1)
+div1_pal = displayio.Palette(1)
+div1_pal[0] = 0x4F63C7
+splash.append(displayio.TileGrid(div1_bmp, pixel_shader=div1_pal, x=160, y=198))
+
+rozet_sure_pal = _rozet(16, 0x22C55E, 20, 202)
+_lbl("SURE", 0xFFFFFF, 1, 44, 199, (0.0, 0.0))
+lbl_toplam_h = _lbl("0sn", 0x4ADE80, 1, 44, 211, (0.0, 0.0))
+
+rozet_termo_pal = _rozet(16, 0xCBD5E1, 176, 202)
+_lbl("TERMO", 0xFFFFFF, 1, 200, 199, (0.0, 0.0))
+lbl_termo_durum = _lbl("KAPALI", 0xE2E8F0, 1, 200, 211, (0.0, 0.0))
+
+lbl_mesaj = _lbl("", 0xFFFFFF, 1, 312, 231, (1.0, 0.0))
 
 gc.collect()
 
@@ -613,7 +738,9 @@ def ota_banner_gizle():
 
 gc.collect()
 
-# ---- Termostat durum banner'i (buyuk, ortada, 5sn sonra kendiliginden kapanir) ----
+# ---- Termostat durum banner'i (buyuk, ortada) ----
+# ACIK: 4sn buyuk yesil banner, sonra sag altta kucuk "TERMO: ACIK" olarak kalir
+# KAPALI: buyuk banner TERMOSTAT ACILANA KADAR ekranda kalir (sure=None -> otomatik kapanmaz)
 termo_banner_grp = displayio.Group()
 termo_bg_bmp = displayio.Bitmap(320, 58, 1)
 termo_bg_pal = displayio.Palette(1)
@@ -638,7 +765,6 @@ def termo_banner_goster(txt, renk, sure, tip):
     termo_banner_grp.hidden = False
     termo_banner_tip = tip
     termo_banner_bitis = (time.monotonic() + sure) if sure is not None else None
-    lbl_termo_durum.text = ""  # buyuk banner acikken kucuk koseyazisi bosalsin
 
 gc.collect()
 
@@ -647,10 +773,10 @@ gc.collect()
 # ============================================================
 
 sistem_ac      = True
-hedef_sicaklik = 50
+hedef_sicaklik = 70
 alarm_aktif    = False
-alarm_esigi    = 60
-alarm_reset    = 50
+alarm_esigi    = 80
+alarm_reset    = 65
 p2_aktif       = False
 oda_termostat  = False
 anot_dusus     = False
@@ -691,6 +817,7 @@ son_modbus     = 0.0
 son_gc         = 0.0
 son_akim       = None
 mesaj_bitis    = 0.0
+son_kwh_kayit  = 0.0
 
 # ============================================================
 #  10. YARDIMCI
@@ -738,7 +865,7 @@ def termostat_oku(p0=None):
     yeni = p0_di or p1_di
     if termostat_prev is not None and yeni != termostat_prev:
         if yeni:
-            termo_banner_goster("TERMOSTAT ACIK", 0x00CC00, 5.0, "acik")
+            termo_banner_goster("TERMOSTAT ACIK", 0x00CC00, 4.0, "acik")
         else:
             termo_banner_goster("TERMOSTAT KAPALI", 0xCC3300, None, "kapali")
     termostat_prev = yeni
@@ -804,12 +931,18 @@ def buton_oku(basilanlar):
         donma_koruma = False
         if standby_modu:
             sistem_ac = False
-            mesaj_goster("STANDBY", 3.0, 0xAAAAAA)
+            mesaj_goster("STANDBY", 3.0, 0xE2E8F0)
             buzzer_bip(0.05)
         else:
             sistem_ac = True
             mesaj_goster("SISTEM AKTIF", 3.0, 0x00FF88)
             buzzer_bip(0.1)
+    if press[4]:
+        kwh_ay_sifirla()
+        buzzer_bip(0.05)
+        time.sleep(0.08)
+        buzzer_bip(0.05)
+        mesaj_goster("AYLIK KWH SIFIRLANDI", 3.0, 0xFFDD00)
     if press[1] or press[2] or press[3]:
         _mod_durum_bekliyor[0] = True
 
@@ -821,7 +954,7 @@ def uzaktan_mod_uygula(cmd):
     O yuzden burada DOGRUDAN _mqtt_client.publish() cagirmiyoruz -
     ayni anda hem mesaj isleyip hem yeni mesaj gondermek MQTT
     kutuphanesini kilitleyip karti resetleyebiliyordu. Bunun yerine
-    sadece bir bayrak birakiyoruz, gercek yayin ana donguде guvenli
+    sadece bir bayrak birakiyoruz, gercek yayin ana dongude guvenli
     bir noktada (ag_servis icinde) yapiliyor.
     """
     global yaz_modu, yaz_p1_bas65, yaz_p1_bas65ust
@@ -844,7 +977,7 @@ def uzaktan_mod_uygula(cmd):
         donma_koruma = False
         sistem_ac = False
         buzzer_bip(0.05)
-        mesaj_goster("STANDBY (uzaktan)", 3.0, 0xAAAAAA)
+        mesaj_goster("STANDBY (uzaktan)", 3.0, 0xE2E8F0)
     elif cmd == "STANDBY_KAPA":
         standby_modu = False
         sistem_ac = True
@@ -918,7 +1051,7 @@ def kontrol(sicaklik, now):
                     if pca:
                         port1_kademeli_kapat()
                     elektrot_sure_guncelle(False, False, False, now)
-                    mesaj_goster("STANDBY", 3.0, 0xAAAAAA)
+                    mesaj_goster("STANDBY", 3.0, 0xE2E8F0)
                     return
                 _q0_etkin = False
                 _q1_etkin = True
@@ -963,7 +1096,7 @@ def kontrol(sicaklik, now):
             p1_aktif = sure < 30.0
             yaz_p1_bas65ust = 0.0
     else:
-        if sicaklik < 45.0:
+        if 60.0 <= sicaklik <= 65.0:
             if p1_dongu_bas == 0.0:
                 p1_dongu_bas = now
                 p1_aktif = True
@@ -973,24 +1106,21 @@ def kontrol(sicaklik, now):
             p1_aktif     = True
             p1_dongu_bas = 0.0
 
-    # P2 pompa (petek) - yerden isitma: 50'de acilir, 45'e inene kadar kapanmaz
+    # P2 pompa (petek) - termostat KAPALIYKEN KESINLIKLE calismaz
     _p2_eski = p2_aktif
-    if yaz_modu:
+    if yaz_modu or not oda_termostat:
         p2_aktif = False
-    elif sicaklik >= 50.0:
+    elif sicaklik >= 70.0:
         p2_aktif = True
-    elif sicaklik <= 45.0:
+    elif sicaklik <= 65.0:
         p2_aktif = False
-    # 45-50C arasi: p2_aktif oldugu gibi kalir (histerezis)
+    # 65-70C arasi ve termostat acikken: p2_aktif oldugu gibi kalir (histerezis)
     if p2_aktif != _p2_eski:
-        try:
-            with open("/p2_log.txt", "a") as _f:
-                _f.write(f"t={now:.1f} sicaklik={sicaklik} yaz={yaz_modu} P2: {_p2_eski}->{p2_aktif}\n")
-        except Exception:
-            pass
+        _log_yaz_sinirli("/p2_log.txt",
+            f"t={now:.1f} sicaklik={sicaklik} termostat={oda_termostat} yaz={yaz_modu} P2: {_p2_eski}->{p2_aktif}\n")
 
-    # Elektrot kademesi (yerden isitma: 45/50C esikleri)
-    if sicaklik >= 50.0:
+    # Elektrot kademesi
+    if sicaklik >= 70.0:
         anot_dusus = True
         _q0_etkin = False
         _q1_etkin = False
@@ -1006,8 +1136,8 @@ def kontrol(sicaklik, now):
         return
 
     if anot_dusus:
-        if sicaklik > 45.0:
-            # 50'den sonra, 45'e dusene kadar: hicbir elektrot calismaz
+        if sicaklik > 65.0:
+            # 70'ten sonra, 65'e dusene kadar: hicbir elektrot calismaz
             _q0_etkin = False
             _q1_etkin = False
             _q0_duty  = 0.0
@@ -1024,16 +1154,28 @@ def kontrol(sicaklik, now):
             anot_dusus = False
 
     q2_ac = False
-    if sicaklik >= 45.0:
-        # 45-50C bandi: Q1 ve Q2 calisir (Q0 kapali)
+    if sicaklik >= 67.0:
+        # 67-70C bandi: sadece Q1 calisir (tek elektrot)
+        _q0_etkin = False
+        _q1_etkin = True
+        _q0_duty  = 0.0
+        _q1_duty  = 1.0
+        port1_uygula(False, True, False, p2_aktif, p1_aktif)
+    elif sicaklik >= 65.0:
+        # 65-67C bandi: Q1 ve Q2 calisir (2 elektrot)
         _q0_etkin = False
         _q1_etkin = True
         _q0_duty  = 0.0
         _q1_duty  = 1.0
         q2_ac     = True
         port1_uygula(False, True, True, p2_aktif, p1_aktif)
+    elif sicaklik >= 60.0:
+        _q0_etkin = True
+        _q1_etkin = True
+        _q0_duty  = 1.0
+        _q1_duty  = 1.0
+        port1_uygula(True, True, False, p2_aktif, p1_aktif)
     else:
-        # 0-45C: 3 elektrot
         q2_ac     = True
         _q0_etkin = True
         _q1_etkin = True
@@ -1064,20 +1206,20 @@ def ekran_guncelle(sicaklik, akim, now):
         lbl_durum.color = 0xFF4400
     elif standby_modu:
         lbl_durum.text  = "STANDBY"
-        lbl_durum.color = 0x9AA3B0
+        lbl_durum.color = 0xE2E8F0
     elif not sistem_ac:
         lbl_durum.text  = "KAPALI"
         lbl_durum.color = 0xFFAA00
     else:
         lbl_durum.text  = "* AKTiF"
-        lbl_durum.color = 0x00DD66
+        lbl_durum.color = 0x22C55E
 
     if yaz_modu:
         lbl_mod.text  = "* YAZ *"
         lbl_mod.color = 0xFFDD00
     else:
         lbl_mod.text  = "* KIS *"
-        lbl_mod.color = 0x88CCFF
+        lbl_mod.color = 0x38BDF8
 
     if sicaklik is not None:
         lbl_sicaklik.text = fmt1(sicaklik)
@@ -1086,11 +1228,11 @@ def ekran_guncelle(sicaklik, akim, now):
         elif sicaklik >= 68.0:
             lbl_sicaklik.color = 0xFF9900
         else:
-            lbl_sicaklik.color = 0x0A2A4A
-        sic_cerceve_pal[0] = 0xFF2255 if alarm_aktif else 0x0055AA
+            lbl_sicaklik.color = 0xE8491F
+        sic_kart_pal[0] = 0xFFE0E0 if alarm_aktif else 0xFFFFFF
     else:
         lbl_sicaklik.text  = "--.-"
-        lbl_sicaklik.color = 0x9AA3B0
+        lbl_sicaklik.color = 0x334155
 
     sic_bar_guncelle(sicaklik)
     lbl_hd.text = "HEDEF " + fmti(hedef_sicaklik) + "C"
@@ -1102,13 +1244,15 @@ def ekran_guncelle(sicaklik, akim, now):
     for i in range(3):
         aktif = sq_durumlar[i]
         if aktif:
-            eq_pal_list[i][0]    = 0xFF3B30
-            lbl_eq_isim[i].color = 0xFFFFFF
-            lbl_eq_saat[i].color = 0xFFFFFF
+            eq_pal_list[i][0]    = 0xBBF7D0
+            lbl_eq_isim[i].color = 0x16A34A
+            lbl_eq_saat[i].color = 0x16A34A
+            eq_badge_pal[i][1]   = 0x22C55E
         else:
-            eq_pal_list[i][0]    = 0xFFFFFF
-            lbl_eq_isim[i].color = 0x9AA3B0
-            lbl_eq_saat[i].color = 0x9AA3B0
+            eq_pal_list[i][0]    = 0xE2E8F0
+            lbl_eq_isim[i].color = 0x334155
+            lbl_eq_saat[i].color = 0x334155
+            eq_badge_pal[i][1]   = 0x64748B
         lbl_eq_saat[i].text = sure_format(elec_saniye(i))
 
     if now - son_fan >= 0.20:
@@ -1116,38 +1260,47 @@ def ekran_guncelle(sicaklik, akim, now):
         son_fan = now
 
     if sistem_ac and not alarm_aktif and p1_aktif:
-        p1_pal[0]       = 0xFF3B30
+        p1_pal[0]       = 0xA5F3FC
         lbl_p1_fan.text  = FAN_KARE[fan_idx]
-        lbl_p1_fan.color = 0xFFFFFF
-        lbl_p1_ad.color  = 0xFFFFFF
+        lbl_p1_fan.color = 0x0E7490
+        lbl_p1_ad.color  = 0x0E7490
     else:
-        p1_pal[0]       = 0xFFFFFF
+        p1_pal[0]       = 0xE2E8F0
         lbl_p1_fan.text  = FAN_DUR
-        lbl_p1_fan.color = 0x9AA3B0
-        lbl_p1_ad.color  = 0x9AA3B0
+        lbl_p1_fan.color = 0x334155
+        lbl_p1_ad.color  = 0x334155
 
     if p1_reg & M_Q4:
-        p2_pal[0]       = 0xFF3B30
+        p2_pal[0]       = 0xA5F3FC
         lbl_p2_fan.text  = FAN_KARE[(fan_idx + 2) % 4]
-        lbl_p2_fan.color = 0xFFFFFF
-        lbl_p2_ad.color  = 0xFFFFFF
+        lbl_p2_fan.color = 0x0E7490
+        lbl_p2_ad.color  = 0x0E7490
     else:
-        p2_pal[0]       = 0xFFFFFF
+        p2_pal[0]       = 0xE2E8F0
         lbl_p2_fan.text  = FAN_DUR
-        lbl_p2_fan.color = 0x9AA3B0
-        lbl_p2_ad.color  = 0x9AA3B0
+        lbl_p2_fan.color = 0x334155
+        lbl_p2_ad.color  = 0x334155
 
     lbl_toplam_h.text = sure_format(elec_toplam_saniye())
+
+    # TERMO hucresi HER ZAMAN canli gercek durumu gosterir (banner'dan bagimsiz)
+    if oda_termostat:
+        lbl_termo_durum.text  = "ACIK"
+        lbl_termo_durum.color = 0x4ADE80
+        rozet_termo_pal[1]    = 0x22C55E
+    else:
+        lbl_termo_durum.text  = "KAPALI"
+        lbl_termo_durum.color = 0xFF5555
+        rozet_termo_pal[1]    = 0xEF4444
 
     if now > mesaj_bitis and not alarm_aktif and sistem_ac:
         lbl_mesaj.text = ""
 
+    # Buyuk ortadaki termostat banner'i sadece kendi suresi dolunca kapanir
+    # (ACIK: 4sn sonra otomatik kapanir / KAPALI: sure=None, termostat acilana kadar kalir)
     if (not termo_banner_grp.hidden and termo_banner_bitis is not None
             and now > termo_banner_bitis):
         termo_banner_grp.hidden = True
-        if termo_banner_tip == "acik":
-            lbl_termo_durum.text  = "TERMO: ACIK"
-            lbl_termo_durum.color = 0x00CC00
 
 # ============================================================
 #  14. LOGO
@@ -1260,6 +1413,8 @@ def _telemetri_yayinla():
         _mqtt_client.publish(TOPIC_TERMO, "ACIK" if oda_termostat else "KAPALI", retain=True)
         _mqtt_client.publish(TOPIC_TOPLAM, str(int(elec_toplam_saniye())), retain=True)
         _mqtt_client.publish(TOPIC_KWH, str(round(kwh_bugun, 3)), retain=True)
+        _mqtt_client.publish(TOPIC_KWH_TOPLAM, str(round(kwh_toplam, 3)), retain=True)
+        _mqtt_client.publish(TOPIC_KWH_AY, str(round(kwh_ay, 3)), retain=True)
         _mqtt_client.publish(TOPIC_MOD_STATUS, f"YAZ:{int(yaz_modu)},STANDBY:{int(standby_modu)}", retain=True)
     except Exception as e:
         print("Telemetri yayin hatasi:", e)
@@ -1368,6 +1523,11 @@ def _ota_guncelle(url):
             pass
         try:
             _mqtt_client.publish(TOPIC_OTA_STATUS, "OTA:TAMAMLANDI:REBOOT", retain=False)
+        except Exception:
+            pass
+        try:
+            kwh_kaydet()
+            kwh_ay_kaydet()
         except Exception:
             pass
         time.sleep(2)
@@ -1532,6 +1692,11 @@ while True:
         if now - son_gc >= 15.0:
             gc.collect()
             son_gc = now
+
+        if now - son_kwh_kayit >= KWH_KAYIT_ARALIK:
+            son_kwh_kayit = now
+            kwh_kaydet()
+            kwh_ay_kaydet()
 
         time.sleep(0.1)
 
